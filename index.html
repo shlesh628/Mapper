@@ -1,0 +1,3307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mapper">
+<meta name="theme-color" content="#eef1f6">
+<title>Mapper</title>
+<style>
+  :root {
+    --bg: #eef1f6;
+    --panel-bg: rgba(250,251,253,.94);
+    --panel-border: rgba(0,0,0,.12);
+    --chip-bg: rgba(255,255,255,.85);
+    --btn-bg: #e4e8ef;
+    --btn-active: #d2d8e3;
+    --btn-text: #20242c;
+    --text: #20242c;
+    --muted: #5a6478;
+    --card-bg: #ffffff;
+    --input-bg: #ffffff;
+    --input-border: #c9d0db;
+    --sw-border: rgba(0,0,0,.2);
+    --shadow: rgba(0,0,0,.15);
+  }
+  body.dark {
+    --bg: #0f1015;
+    --panel-bg: rgba(20,22,28,.92);
+    --panel-border: rgba(255,255,255,.08);
+    --chip-bg: rgba(15,17,22,.75);
+    --btn-bg: #2a2f3a;
+    --btn-active: #3a4150;
+    --btn-text: #ffffff;
+    --text: #eaeaea;
+    --muted: #9aa2b8;
+    --card-bg: #1b1e26;
+    --input-bg: #0f1116;
+    --input-border: #333a47;
+    --sw-border: rgba(255,255,255,.22);
+    --shadow: rgba(0,0,0,.3);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* iOS: no double-tap zoom / 300ms delay on any button. */
+  button { touch-action: manipulation; }
+  html, body { height: 100%; margin: 0; overflow: hidden; position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0; inset: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    /* --app-h is set from the visual viewport so iOS keyboards/URL bar never
+       leave the app stuck below the fold. -webkit-fill-available fixes the
+       classic iOS 100vh bug. */
+    height: var(--app-h, 100%);
+    min-height: -webkit-fill-available;
+    touch-action: none;
+    overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-text-size-adjust: 100%;
+    color: var(--text);
+  }
+  #cv { position: fixed; top: 0; left: 0; right: 0; bottom: 0; inset: 0; touch-action: none; display: block; }
+  .hint {
+    position: fixed; top: calc(54px + env(safe-area-inset-top)); left: 50%;
+    transform: translateX(-50%); z-index: 9;
+    font-size: 12px; color: var(--muted); background: var(--chip-bg);
+    padding: 6px 14px; border-radius: 999px; white-space: nowrap;
+    pointer-events: none; box-shadow: 0 2px 6px var(--shadow);
+    transition: opacity .6s ease;
+  }
+  .hint.hide { opacity: 0; }
+  .hint.err { color: #e0344c; font-weight: 600; }
+  .searchbar {
+    position: fixed; top: calc(96px + env(safe-area-inset-top)); left: 50%;
+    transform: translateX(-50%); z-index: 10;
+    display: flex; align-items: center; gap: 6px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    padding: 6px 8px; border-radius: 12px; box-shadow: 0 2px 10px var(--shadow);
+    width: 340px; width: min(340px, calc(100% - 24px));
+  }
+  .searchbar[hidden] { display: none; }
+  .searchbar input {
+    flex: 1; min-width: 0; border: 0; outline: none;
+    background: transparent; color: var(--text); font-size: 16px;
+    -webkit-appearance: none; appearance: none;
+  }
+  .searchbar button {
+    flex: 0 0 auto; width: 32px; height: 32px; border: 0; border-radius: 8px;
+    background: var(--btn-bg); color: var(--btn-text); font-size: 18px; line-height: 1;
+  }
+  .searchbar button:active { background: var(--btn-active); }
+  .floors {
+    position: fixed; z-index: 10;
+    left: calc(68px + env(safe-area-inset-left)); right: 12px;
+    top: calc(8px + env(safe-area-inset-top));
+    display: flex; align-items: center; gap: 6px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .floors::-webkit-scrollbar { display: none; }
+  .ftab-wrap { flex: 0 0 auto; position: relative; }
+  .ftab {
+    height: 36px; padding: 0 30px 0 14px; border: 0; border-radius: 999px;
+    background: var(--chip-bg); color: var(--muted);
+    font-size: 13px; font-weight: 600; box-shadow: 0 2px 6px var(--shadow);
+    white-space: nowrap;
+    touch-action: manipulation; user-select: none; -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .ftab-wrap.active .ftab { background: #2f7cff; color: #fff; }
+  .ftab-del {
+    position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+    width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%;
+    background: transparent; color: var(--muted); font-size: 15px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: manipulation; -webkit-touch-callout: none;
+  }
+  .ftab-wrap.active .ftab-del { color: #fff; }
+  .ftab-del:active { background: var(--btn-active); }
+  .ftab-del:disabled { opacity: .35; }
+  .ftab-add {
+    flex: 0 0 auto; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px;
+    background: var(--chip-bg); color: var(--text); font-size: 18px; font-weight: 600;
+    box-shadow: 0 2px 6px var(--shadow);
+  }
+  .ftab-add:active { background: var(--btn-active); }
+  .theme {
+    position: fixed; left: 12px; top: calc(12px + env(safe-area-inset-top)); z-index: 10;
+  }
+  .theme button {
+    width: 46px; height: 46px; border-radius: 12px; border: 0;
+    background: var(--panel-bg); color: var(--text); font-size: 20px; font-weight: 600;
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+  }
+  .theme button:active { background: var(--btn-active); }
+  /* Small floor-change indicator below the theme switcher: an upload arrow
+     pops up when moving to a higher floor, a download arrow drops down when
+     moving to a lower floor. One-shot CSS animation ends invisible (forwards)
+     so it can never stay stuck on screen. */
+  #floorIndicator {
+    position: fixed; left: 12px; top: calc(88px + env(safe-area-inset-top)); z-index: 11;
+    width: 34px; height: 34px; border-radius: 10px;
+    background: var(--panel-bg); color: var(--text);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    opacity: 0; visibility: hidden; pointer-events: none;
+  }
+  #floorIndicator.show-up { animation: indUp .6s ease forwards; }
+  #floorIndicator.show-down { animation: indDown .6s ease forwards; }
+  @keyframes indUp {
+    0% { opacity: 1; transform: translateY(6px); visibility: visible; }
+    60% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-16px); visibility: hidden; }
+  }
+  @keyframes indDown {
+    0% { opacity: 1; transform: translateY(-6px); visibility: visible; }
+    60% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(16px); visibility: hidden; }
+  }
+  .zoom {
+    position: fixed; right: 12px; top: calc(52px + env(safe-area-inset-top));
+    display: flex; flex-direction: column; gap: 8px; z-index: 10;
+  }
+  .zoom button {
+    width: 46px; height: 46px; border-radius: 12px; border: 0;
+    background: var(--panel-bg); color: var(--text); font-size: 20px; font-weight: 600;
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+  }
+  .zoom button:active { background: var(--btn-active); }
+  .zoom button.mode-on { background: #2f7cff; color: #fff; }
+  /* Vertical rotate lever: a track with a blue knob centred by default. The
+     knob is dragged up (rotate anti-clockwise) or down (rotate clockwise) and
+     springs back to the middle on release, like a lever. */
+  .rot-slider {
+    position: relative;
+    width: 46px; height: 100px;
+    border-radius: 12px;
+    background: var(--panel-bg);
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+  }
+  .rot-track {
+    position: absolute;
+    width: 4px; height: 84px;
+    border-radius: 2px;
+    background: rgba(127,140,160,0.5);
+  }
+  .rot-knob {
+    position: absolute; left: 50%; top: 50%;
+    width: 28px; height: 28px;
+    margin-left: -14px; margin-top: -14px;
+    border-radius: 50%;
+    background: #2f7cff;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,.4);
+    will-change: transform;
+    cursor: pointer;
+  }
+  .rot-knob.dragging { transition: none; }
+  .rot-knob.spring { transition: transform 0.28s cubic-bezier(.2,1.4,.4,1); }
+  .toolbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: calc(10px + env(safe-area-inset-bottom)) 12px 12px;
+    background: var(--panel-bg); border-top: 1px solid var(--panel-border);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  .toolbar[hidden] { display: none; }
+  .toolbar-toggle {
+    position: fixed; left: 12px; bottom: 12px; z-index: 11;
+    width: 46px; height: 46px; border-radius: 12px; border: 0;
+    background: var(--panel-bg); color: var(--text);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+  }
+  .toolbar-toggle:active { background: var(--btn-active); }
+  /* Floating undo/redo pair in the bottom-right: sits just above the toolbar
+     when it is visible and drops to the bottom edge when it is hidden (but
+     stays visible either way). */
+  .undoredo {
+    position: fixed; right: 12px; bottom: 12px; z-index: 11;
+    display: flex; gap: 8px;
+  }
+  .undoredo .btn {
+    width: 46px; height: 46px; min-height: 46px; padding: 0;
+    background: var(--panel-bg); color: var(--text);
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+  }
+  .tb-row { display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    min-height: 46px; padding: 0 14px; border: 0; border-radius: 12px;
+    background: var(--btn-bg); color: var(--btn-text); font-size: 15px; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    box-shadow: 0 2px 6px var(--shadow);
+  }
+  .btn:active { background: var(--btn-active); }
+  .btn.primary { background: #2f7cff; color: #fff; }
+  .btn.danger { background: #e0344c; color: #fff; }
+  .btn:disabled { opacity: .35; }
+  .btn.mode-on { background: #2f7cff; color: #fff; }
+  .tb-row2 .btn { min-height: 40px; padding: 0 16px; font-size: 14px; }
+  /* About button floats at the toolbar's bottom-right corner without
+     disturbing the centred export/import/view row. */
+  #infoBtn {
+    position: absolute; right: 12px; bottom: 12px;
+    width: 46px; height: 46px; padding: 0; border: 0; border-radius: 12px;
+    background: var(--btn-bg); color: var(--btn-text);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px var(--shadow);
+  }
+  #infoBtn:active { background: var(--btn-active); }
+  .colorpanel {
+    margin: calc(-10px - env(safe-area-inset-bottom)) -12px 8px;
+    padding: 10px 12px 12px;
+    background: var(--panel-bg);
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .colorpanel[hidden] { display: none; }
+  .cp-title { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .cp-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .sw {
+    width: 42px; height: 42px; border-radius: 50%; border: 3px solid var(--sw-border);
+    padding: 0; box-shadow: 0 2px 5px var(--shadow);
+  }
+  .sw.active { border-color: var(--text); transform: scale(1.12); }
+  .cp-alpha { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); flex: 1; min-width: 150px; }
+  .cp-alpha input { flex: 1; accent-color: #2f7cff; }
+  .cp-alpha b { min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+  #overlay, #confirmOverlay, #infoOverlay, #notesOverlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0; inset: 0;
+    background: rgba(0,0,0,.55);
+    display: none; align-items: center; justify-content: center; z-index: 20;
+  }
+  #overlay.show, #confirmOverlay.show, #infoOverlay.show, #notesOverlay.show { display: flex; }
+  .card {
+    width: 320px; width: min(320px, 86vw);
+    background: var(--card-bg); border-radius: 16px;
+    padding: 18px; box-shadow: 0 12px 40px rgba(0,0,0,.5);
+    color: var(--text);
+  }
+  .card h3 { margin: 0 0 12px; font-size: 17px; }
+  .card-note { margin: 0 0 4px; font-size: 13px; color: var(--muted); }
+  .card input {
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--input-border);
+    background: var(--input-bg); color: var(--text); font-size: 16px; outline: none;
+    -webkit-appearance: none; appearance: none;
+  }
+  .card textarea {
+    width: 100%; min-height: 140px; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--input-border);
+    background: var(--input-bg); color: var(--text); font-size: 16px; line-height: 1.45;
+    outline: none; resize: vertical; font-family: inherit;
+    -webkit-appearance: none; appearance: none;
+  }
+  .card .row { display: flex; gap: 10px; margin-top: 14px; }
+  .card .row .btn { flex: 1; }
+  #dupBtn[hidden] { display: none; }
+  #wheelOverlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0; inset: 0;
+    background: rgba(0,0,0,.55);
+    display: none; align-items: center; justify-content: center; z-index: 30;
+  }
+  #wheelOverlay.show { display: flex; }
+  .wheel-card { width: 320px; width: min(320px, 90vw); }
+  .wheel-area { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .wheel-canvas { touch-action: none; border-radius: 50%; }
+  .val-canvas { touch-action: none; border-radius: 6px; }
+  .wheel-preview { display: flex; align-items: center; gap: 10px; width: 170px; }
+  .wheel-preview .swatch-box {
+    width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--input-border);
+    flex: 0 0 auto;
+  }
+  .wheel-preview input#wheelHexInput {
+    flex: 1; min-width: 0; padding: 8px 10px; font-size: 16px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    text-align: right; border-radius: 8px; border: 1px solid var(--input-border);
+    background: var(--input-bg); color: var(--text); outline: none;
+    user-select: text; -webkit-user-select: text; touch-action: auto;
+    -webkit-appearance: none; appearance: none;
+  }
+  .wheel-preview input#wheelHexInput.invalid { border-color: #e0344c; }
+  input, textarea { user-select: text; -webkit-user-select: text; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div class="hint" id="hint">Drag to pan - tap a shape - double-tap adds - hold deletes - pinch to zoom</div>
+<div class="theme">
+  <button id="themeBtn" aria-label="Toggle theme" type="button">&#x263E;</button>
+</div>
+<div class="zoom">
+  <button id="home" aria-label="Reset view to origin" type="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg></button>
+  <button id="crosshairBtn" aria-label="Toggle crosshair" type="button">&#x2295;</button>
+  <button id="searchBtn" aria-label="Search" type="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>
+  <button id="viewBtnZoom" aria-label="Toggle view mode" type="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
+  <div class="rot-slider" id="rotSlider" role="slider" aria-label="Rotate view: drag up for clockwise, down for anti-clockwise" aria-valuemin="-1" aria-valuemax="1" aria-valuenow="0">
+    <div class="rot-track"></div>
+    <div class="rot-knob" id="rotKnob"></div>
+  </div>
+</div>
+<div id="floorIndicator" aria-hidden="true"></div>
+<div class="floors" id="floorTabs"></div>
+<div class="toolbar">
+  <div class="colorpanel" id="colorPanel" hidden>
+    <div class="cp-title">Fill color (border is solid, fill is translucent)</div>
+    <div class="cp-row" id="swatches"></div>
+    <div class="cp-row">
+      <button class="btn" id="wheelBtn" type="button">Color wheel</button>
+      <label class="cp-alpha">Fill opacity <input type="range" id="alphaRange" min="5" max="100" step="5" value="30"><b id="alphaVal">30%</b></label>
+    </div>
+  </div>
+  <div class="tb-row">
+    <button class="btn primary" id="addBtn" type="button">+ Add</button>
+    <button class="btn" id="markerBtn" type="button">Marker</button>
+    <button class="btn" id="editBtn" type="button">Edit</button>
+    <button class="btn" id="selectBtn" type="button">Move</button>
+    <button class="btn" id="colorBtn" disabled type="button">Color</button>
+    <button class="btn" id="renameBtn" disabled type="button">Rename</button>
+    <button class="btn danger" id="delBtn" disabled type="button">Delete</button>
+    <button class="btn" id="notesBtn" disabled type="button">Notes</button>
+  </div>
+  <div class="tb-row tb-row2">
+    <button class="btn" id="exportBtn" type="button">Export</button>
+    <button class="btn" id="importBtn" type="button">Import</button>
+    <button class="btn" id="viewBtn" type="button">View</button>
+  </div>
+  <button id="infoBtn" type="button" aria-label="About"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg></button>
+</div>
+</div>
+<div class="undoredo">
+  <button class="btn" id="undoBtn" disabled type="button" aria-label="Undo"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg></button>
+  <button class="btn" id="redoBtn" disabled type="button" aria-label="Redo"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.62 3.62z"/></svg></button>
+</div>
+<button class="toolbar-toggle" id="toolbarToggle" aria-label="Toggle toolbar" type="button"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg></button>
+<div class="searchbar" id="searchBar" hidden>
+  <input type="search" id="searchInput" placeholder="Search rooms..." autocomplete="off">
+  <button id="searchClose" type="button" aria-label="Close search">&#x00D7;</button>
+</div>
+<input type="file" id="fileInput" accept=".json,application/json" hidden>
+<div id="wheelOverlay">
+  <div class="card wheel-card">
+    <h3>Pick a colour</h3>
+    <div class="wheel-area">
+      <canvas class="wheel-canvas" id="wheelCanvas" width="170" height="170"></canvas>
+      <canvas class="val-canvas" id="valCanvas" width="170" height="24"></canvas>
+      <div class="wheel-preview">
+        <div class="swatch-box" id="wheelPreview"></div>
+        <input type="text" id="wheelHexInput" maxlength="9" placeholder="#4F8CFF" spellcheck="false" autocomplete="off" autocapitalize="off">
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" id="wheelCancel" type="button">Cancel</button>
+      <button class="btn primary" id="wheelDone" type="button">Done</button>
+    </div>
+  </div>
+</div>
+<div id="overlay">
+  <div class="card">
+    <h3 id="renameTitle">Rename shape</h3>
+    <input id="nameInput" type="text" maxlength="40" placeholder="e.g. Living Room" autocomplete="off">
+    <div class="row">
+      <button class="btn" id="dupBtn" type="button" hidden>Duplicate</button>
+      <button class="btn" id="cancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="okBtn" type="button">Save</button>
+    </div>
+  </div>
+</div>
+<div id="confirmOverlay">
+  <div class="card">
+    <h3 id="confirmTitle"></h3>
+    <p class="card-note">This deletes the floor and all of its shapes.</p>
+    <div class="row">
+      <button class="btn" id="confirmCancel" type="button">Cancel</button>
+      <button class="btn danger" id="confirmOk" type="button">Delete</button>
+    </div>
+  </div>
+</div>
+<div id="infoOverlay">
+  <div class="card">
+    <h3>Via Zen Mapper</h3>
+    <p class="card-note">Version: 0.5.2 alpha</p>
+    <p class="card-note">Status: feature complete</p>
+    <p class="card-note">Platform: Mobile only (iOS untested)</p>
+    <p class="card-note">Creator: Shlesh using Opencode</p>
+    <div class="row">
+      <button class="btn primary" id="infoClose" type="button">Close</button>
+    </div>
+  </div>
+</div>
+<div id="notesOverlay">
+  <div class="card">
+    <h3 id="notesTitle">Notes</h3>
+    <textarea id="notesInput" placeholder="Add notes for this room..."></textarea>
+    <div class="row">
+      <button class="btn" id="notesCancel" type="button">Cancel</button>
+      <button class="btn primary" id="notesSave" type="button">Save</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  // ===== ES5 compatibility shims for older Android WebViews =====
+  // The rest of the file stays strict ES5; these three helpers are the only
+  // ES6 pieces used and are patched here so Chrome/WebView <45-era devices
+  // still run the editor.
+  if (typeof Math.hypot !== 'function') {
+    Math.hypot = function () {
+      var s = 0;
+      for (var i = 0; i < arguments.length; i++) s += arguments[i] * arguments[i];
+      return Math.sqrt(s);
+    };
+  }
+  if (typeof Array.from !== 'function') {
+    Array.from = function (a, mapFn, thisArg) {
+      var out = [];
+      var i = 0, n, step, it, iter;
+      if (typeof Symbol !== 'undefined' && Symbol.iterator && a[Symbol.iterator]) {
+        it = a[Symbol.iterator]();
+        while (!(step = it.next()).done) {
+          out.push(mapFn ? mapFn.call(thisArg, step.value, i) : step.value);
+          i++;
+        }
+        return out;
+      }
+      n = a.length >>> 0;
+      for (i = 0; i < n; i++) out.push(mapFn ? mapFn.call(thisArg, a[i], i) : a[i]);
+      return out;
+    };
+  }
+  if (typeof Object.assign !== 'function') {
+    Object.assign = function (target) {
+      for (var i = 1; i < arguments.length; i++) {
+        var src = arguments[i];
+        if (!src) continue;
+        for (var k in src) {
+          if (Object.prototype.hasOwnProperty.call(src, k)) target[k] = src[k];
+        }
+      }
+      return target;
+    };
+  }
+
+  /* ==========================================================================
+   *  MAPPER — single-file floor-plan canvas editor
+   *  Everything lives in /mnt/sdcard/Opencode/mapper/index.html (HTML+CSS+JS).
+   * ==========================================================================
+   *
+   *  STACK
+   *  - Vanilla JS (ES5 style: var + function declarations only, no build step).
+   *  - One full-screen <canvas id="cv">, redrawn every frame via rAF (draw()).
+   *  - Pointer events (works on touch + mouse). Must stay a single file.
+   *  - No `node` on this device. To validate: extract the <script> and <style>
+   *    blocks and check bracket/brace balance, plus confirm every
+   *    getElementById() id exists in the markup.
+   *
+   *  DATA MODEL
+   *  - Document = `floors` (array). Each floor:
+   *      { name, rects[], marker|null, nextId, view|null }
+   *      nextId = per-floor counter used to assign shape ids.
+   *      view   = pan/zoom snapshot saved when you last left that floor
+   *               (restored when you come back - see save/restoreFloorView).
+   *  - activeIndex = currently visible floor. The live aliases `rects` and
+   *    `marker` point at floors[activeIndex].rects / .marker - keep them in
+   *    sync via syncActiveFloor() (also clears the selection).
+   *  - A shape (called "rect" throughout the code) is:
+   *      { id, name, cx, cy, w, h, rot, color, alpha, pts }
+   *      cx/cy = center, rot = rotation, w/h = parametric box.
+   *      pts (optional) = array of {x,y} LOCAL offsets around the center,
+   *      BEFORE rotation. When pts exists the shape renders as a polygon,
+   *      otherwise as the w/h box. ensurePts() lazily converts a box into a
+   *      4-corner polygon (first edit in Edit mode).
+   *  - marker = single {x,y} world point per floor (red pin).
+   *
+   *  COORDINATES
+   *  - World = abstract units; screen = pixels. Camera is view =
+   *    {x, y, scale, rot}. rot (degrees) rotates the VIEW only; shapes keep
+   *    their own rotation and are never touched. Screen = scale * R(rot) * (world - view).
+   *      s2w(sx,sy) = view + R(-rot) * { sx/scale, sy/scale }   (screen -> world)
+   *      w2s(wx,wy) = R(rot) * { (wx-x)*scale, (wy-y)*scale }   (world -> screen)
+   *  - Shape-local points become world points via:
+   *      world = (cx,cy) + R(rot) * local     (localToWorld / worldToLocal)
+   *
+   *  RENDER PIPELINE  (draw(), runs every frame)
+   *  - grid -> shapes -> selection -> labels -> marker.
+   *  - Shapes are grouped by fill color+alpha (buildGroups) so overlapping
+   *    same-color shapes render as ONE union fill. Internal borders are
+   *    removed by sampling each edge every ~14px and skipping segments whose
+   *    midpoint is inside another group member (pointCovered). Polygons work
+   *    because containsStrict/edgeWorld/shapePath all honour the optional pts.
+   *
+   *  MODES  (Marker & Edit are mutually exclusive; View overrides everything)
+   *  - default : tap to select, hold-then-drag to move (a quick drag pans so
+   *              panning never nudges a shape), 4 box handles to resize, top
+   *              handle to rotate, double-tap a shape to rename. Double-tap on
+   *              empty space adds a rectangle at the crosshair (screen centre,
+   *              no rename dialog), and a stationary 500ms hold on empty space
+   *              deletes the shape under the crosshair (undoable). Holds that
+   *              start on a shape are for dragging and never delete.
+   *  - The crosshair and its gestures can be switched off entirely with the
+   *    #crosshairBtn toggle (top-right, under the origin/home button).
+   *  - Search (#searchBtn) opens a fuzzy-search bar: matching shapes are
+   *    outlined in orange with a pulsing sonar ripple. If the best match lives
+   *    on another floor, the view jumps there automatically; no match anywhere
+   *    flashes a red "Not found" hint.
+   *  - View    : pan/zoom only; all edit controls are disabled.
+   *  - Marker  : tap/drag places or moves the floor marker.
+   *  - Edit    : selected shape shows its real vertices + edge midpoints.
+   *              Drag a vertex to move it, tap an edge midpoint to insert a
+   *              vertex, long-press a vertex to remove it (min 3). Dragging
+   *              inside the shape still moves the whole shape.
+   *              See editHitTest / doVtx / addVtx / removeVtx / removeVtxNow.
+   *
+   *  GESTURES  (canvas pointerdown -> window pointermove/pointerup)
+   *  - One pointer: hitTest() picks a mode (pan/move/resize/rotate/marker/vtx),
+   *    beginGesture() snapshots the pre-state, the move handler mutates the
+   *    live data, and on pointerup commitGesture() pushes history ONLY when
+   *    stateEqual() says something actually changed.
+   *  - Two pointers -> pinch zoom/pan (mode 'pinch').
+   *  - A quick tap (no move, <500ms) routes to handleTap() (double-tap=rename).
+   *
+   *  UNDO / REDO
+   *  - undoStack/redoStack hold full snapshots via capture(): the whole
+   *    {activeIndex, floors[]}. The camera `view` is deliberately NOT part of
+   *    history; per-floor saved views ride inside each floor object instead.
+   *  - RULE: call pushHistory(capture()) BEFORE mutating anything.
+   *  - Continuous gestures use beginGesture()/commitGesture() instead.
+   *
+   *  EXPORT (JSON, version 2)  { view, activeFloor, floors[] }
+   *  - floor: { name, view, marker, rects[] } ; rect: { name, cx, cy, w, h,
+   *    rot, color, alpha, pts, notes } (notes are per-room free text, only
+   *    visible in the Notes dialog, never drawn on the map).
+   *  - Import accepts v2 (multi-floor) and legacy v1 files (top-level
+   *    rects/marker -> wrapped into a "Ground" floor). Imported docs reopen on
+   *    their saved activeFloor and enter View mode.
+   *
+   *  CONVENTIONS / GOTCHAS
+   *  - 'use strict' + one IIFE; function declarations hoist so order is flexible.
+   *  - DOM refs are grabbed at the top; every id must exist in the markup.
+   *  - Keep to ES5 (no const/let/arrow/template literals).
+   *  - colors are hex strings (#rrggbb), alpha is 0..1.
+   *  - Editing shape geometry is undoable through the same gesture pipeline.
+   * ========================================================================== */
+
+  var canvas = document.getElementById('cv');
+  var ctx = canvas.getContext('2d');
+  var hint = document.getElementById('hint');
+  var addBtn = document.getElementById('addBtn');
+  var markerBtn = document.getElementById('markerBtn');
+  var editBtn = document.getElementById('editBtn');
+  var selectBtn = document.getElementById('selectBtn');
+  var colorBtn = document.getElementById('colorBtn');
+  var renameBtn = document.getElementById('renameBtn');
+  var delBtn = document.getElementById('delBtn');
+  var exportBtn = document.getElementById('exportBtn');
+  var importBtn = document.getElementById('importBtn');
+  var undoBtn = document.getElementById('undoBtn');
+  var redoBtn = document.getElementById('redoBtn');
+  var viewBtn = document.getElementById('viewBtn');
+  var viewBtnZoom = document.getElementById('viewBtnZoom');
+  var floorIndicator = document.getElementById('floorIndicator');
+  var floorTabs = document.getElementById('floorTabs');
+  var confirmOverlay = document.getElementById('confirmOverlay');
+  var infoBtn = document.getElementById('infoBtn');
+  var infoOverlay = document.getElementById('infoOverlay');
+  var infoClose = document.getElementById('infoClose');
+  var notesBtn = document.getElementById('notesBtn');
+  var notesOverlay = document.getElementById('notesOverlay');
+  var notesTitle = document.getElementById('notesTitle');
+  var notesInput = document.getElementById('notesInput');
+  var notesSave = document.getElementById('notesSave');
+  var notesCancel = document.getElementById('notesCancel');
+  var confirmTitle = document.getElementById('confirmTitle');
+  var confirmOk = document.getElementById('confirmOk');
+  var confirmCancel = document.getElementById('confirmCancel');
+  var fileInput = document.getElementById('fileInput');
+  var themeBtn = document.getElementById('themeBtn');
+  var colorPanel = document.getElementById('colorPanel');
+  var swatchesEl = document.getElementById('swatches');
+  var alphaRange = document.getElementById('alphaRange');
+  var alphaVal = document.getElementById('alphaVal');
+  var wheelBtn = document.getElementById('wheelBtn');
+  var wheelOverlay = document.getElementById('wheelOverlay');
+  var wheelCanvas = document.getElementById('wheelCanvas');
+  var valCanvas = document.getElementById('valCanvas');
+  var wheelPreview = document.getElementById('wheelPreview');
+  var wheelHexInput = document.getElementById('wheelHexInput');
+  var wheelDone = document.getElementById('wheelDone');
+  var wheelCancel = document.getElementById('wheelCancel');
+  var overlay = document.getElementById('overlay');
+  var nameInput = document.getElementById('nameInput');
+  var renameTitle = document.getElementById('renameTitle');
+  var dupBtn = document.getElementById('dupBtn');
+  var okBtn = document.getElementById('okBtn');
+  var cancelBtn = document.getElementById('cancelBtn');
+  var searchBtn = document.getElementById('searchBtn');
+  var searchBar = document.getElementById('searchBar');
+  var searchInput = document.getElementById('searchInput');
+  var searchClose = document.getElementById('searchClose');
+  var toolbar = document.querySelector('.toolbar');
+  var toolbarToggle = document.getElementById('toolbarToggle');
+  var undoRedo = document.querySelector('.undoredo');
+  var EYE_OPEN = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
+  var EYE_CLOSED = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>';
+  // The toggle sits just above the bottom toolbar; when the toolbar is hidden
+  // it drops down to the bottom edge. offsetHeight is 0 for a hidden toolbar,
+  // so the visible/hidden choice is explicit here.
+  function positionToolbarToggle() {
+    var base = toolbar.hidden ? 12 : toolbar.offsetHeight + 12;
+    toolbarToggle.style.bottom = 'calc(' + base + 'px + env(safe-area-inset-bottom))';
+  }
+  // The undo/redo pair mirrors the toggle: above the toolbar when visible,
+  // dropping to the bottom edge when hidden (never itself hidden).
+  function positionUndoRedo() {
+    var base = toolbar.hidden ? 12 : toolbar.offsetHeight + 12;
+    undoRedo.style.bottom = 'calc(' + base + 'px + env(safe-area-inset-bottom))';
+  }
+  // Both bottom-right floaters must be repositioned whenever the toolbar's
+  // height changes (colour panel opening/closing, toolbar hide/show, resize).
+  function repositionFloaters() {
+    positionToolbarToggle();
+    positionUndoRedo();
+  }
+
+  // ===== Canvas sizing (visual-viewport aware, DPR aware) =====
+  // On iOS the visual viewport is smaller than the layout viewport while the
+  // keyboard is open, so we measure from window.visualViewport when available
+  // and publish the height as --app-h for the fixed-layout CSS. VisualViewport
+  // resize/scroll events (keyboard, URL bar) are throttled through a rAF.
+  var W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 3);
+    var vv = window.visualViewport;
+    var w = vv ? vv.width : window.innerWidth;
+    var h = vv ? vv.height : window.innerHeight;
+    W = w; H = h;
+    document.documentElement.style.setProperty('--app-h', h + 'px');
+    canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    repositionFloaters();
+  }
+  var rafScheduled = false;
+  function scheduleResize() {
+    if (rafScheduled) return;
+    rafScheduled = true;
+    requestAnimationFrame(function () { rafScheduled = false; resize(); });
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 150); });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleResize);
+    window.visualViewport.addEventListener('scroll', scheduleResize);
+  }
+  document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+  resize();
+
+  // ===== Theme: canvas palette (background/grid/label colors per theme) =====
+  function palette() {
+    if (document.body.classList.contains('dark')) {
+      return {
+        bg: '#101217',
+        minor: 'rgba(255,255,255,0.05)',
+        major: 'rgba(255,255,255,0.10)',
+        axes: 'rgba(120,160,255,0.35)',
+        cross: 'rgba(255,255,255,0.7)',
+        labelStroke: 'rgba(0,0,0,0.65)',
+        labelFill: '#ffffff'
+      };
+    }
+    return {
+      bg: '#eef1f6',
+      minor: 'rgba(30,45,70,0.07)',
+      major: 'rgba(30,45,70,0.13)',
+      axes: 'rgba(70,100,210,0.4)',
+      cross: 'rgba(15,20,30,0.6)',
+      labelStroke: 'rgba(255,255,255,0.9)',
+      labelFill: '#1d2433'
+    };
+  }
+
+  // ===== Context-sensitive hint line (top-centre) =====
+  // Any shown hint fades out 5s after it appears (hintShow schedules the hide).
+  var DEFAULT_HINT = 'Drag to pan - tap a shape - hold then drag to move - double-tap adds - hold deletes - pinch to zoom';
+  function hintText() {
+    if (viewMode) return markerMode ? 'View mode: pan/zoom, tap to place or drag to move the marker' : 'View mode: pan and zoom only';
+    if (markerMode) return 'Marker mode: tap to place, drag to move';
+    if (editMode) return 'Edit mode: drag vertices, tap edge to add, hold to remove';
+    if (selectMode) return 'Move mode: tap to pick/drop, hold then drag to move, hold empty space to box-select, drag to pan';
+    return crosshairEnabled ? DEFAULT_HINT : 'Drag to pan - tap a shape - pinch to zoom';
+  }
+  function hintShow() {
+    hint.classList.remove('hide');
+    clearTimeout(hint._t);
+    hint._t = setTimeout(function () { hint.classList.add('hide'); }, 5000);
+  }
+  // Show a hint that stays up until something else replaces it (used for live
+  // search results so the match count persists while the search is open).
+  function hintPersist() {
+    hint.classList.remove('hide');
+    clearTimeout(hint._t);
+    clearTimeout(hint._flashT);
+  }
+  function updateHintText() {
+    hint.classList.remove('err');
+    hint.textContent = hintText();
+    hintShow();
+  }
+  function hintFlash(msg) {
+    hint.textContent = msg;
+    hintShow();
+    clearTimeout(hint._flashT);
+    hint._flashT = setTimeout(function () { hint.textContent = hintText(); }, 2200);
+  }
+
+  // ===== Fuzzy search (toggle + live highlight) =====
+  // Scores a fuzzy subsequence match of `q` inside `s`: characters must appear
+  // in order; consecutive runs and word-start hits score higher. Returns 0 if
+  // the query can't be formed from the string at all.
+  function fuzzyScore(q, s) {
+    if (!q) return 0;
+    q = q.toLowerCase();
+    s = (s || '').toLowerCase();
+    var score = 0, qi = 0, prev = -2;
+    for (var i = 0; i < s.length && qi < q.length; i++) {
+      if (s.charAt(i) === q.charAt(qi)) {
+        var cur = 1;
+        if (prev === i - 1) cur += 8;
+        if (i === 0 || s.charAt(i - 1) === ' ' || s.charAt(i - 1) === '-' || s.charAt(i - 1) === '_') cur += 6;
+        score += cur;
+        prev = i;
+        qi++;
+      }
+    }
+    return qi === q.length ? score : 0;
+  }
+  // Search every floor for shapes whose name OR notes fuzzily match the query.
+  // Every match on every floor is kept so highlights follow you across floor
+  // tabs; the view only jumps to another floor when the CURRENT floor has no
+  // match. On a miss, flash a red "Not found" hint.
+  function runSearch() {
+    var q = searchInput.value.trim();
+    if (!q) {
+      searchMatches.length = 0;
+      hint.classList.remove('err');
+      updateHintText();
+      return;
+    }
+    var best = null, byFloor = [], total = 0;
+    for (var fi = 0; fi < floors.length; fi++) {
+      byFloor.push([]);
+      var fr = floors[fi].rects;
+      for (var i = 0; i < fr.length; i++) {
+        var sn = fuzzyScore(q, fr[i].notes);
+        var sc = Math.max(fuzzyScore(q, fr[i].name), sn);
+        if (sc > 0) {
+          byFloor[fi].push({ fi: fi, id: fr[i].id, notes: sn > 0 });
+          total++;
+          if (!best || sc > best.score) best = { fi: fi, r: fr[i], score: sc };
+        }
+      }
+    }
+    if (!best) {
+      searchMatches.length = 0;
+      hint.classList.add('err');
+      hint.textContent = 'Not found';
+      hintPersist();
+      return;
+    }
+    hint.classList.remove('err');
+    // Keep ALL matches (every floor) so highlights persist across floor tabs;
+    // drawSearchHighlights filters by the active floor.
+    searchMatches = [];
+    for (var f = 0; f < byFloor.length; f++) {
+      for (var m = 0; m < byFloor[f].length; m++) searchMatches.push(byFloor[f][m]);
+    }
+    // Only jump to another floor when the current one has zero matches.
+    if (byFloor[activeIndex].length === 0) switchFloor(best.fi);
+    hint.textContent = total + ' match' + (total > 1 ? 'es' : '') + ' for "' + q + '"';
+    hintPersist();
+  }
+
+  function setTheme(dark) {
+    document.body.classList.toggle('dark', dark);
+    themeBtn.textContent = dark ? '\u263E' : '\u2600';
+    // Android Chrome colours its URL bar with theme-color.
+    var metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) metaTheme.setAttribute('content', dark ? '#0f1015' : '#eef1f6');
+    try { localStorage.setItem('mapperTheme', dark ? 'dark' : 'light'); } catch (err) {}
+  }
+  themeBtn.addEventListener('click', function () {
+    setTheme(!document.body.classList.contains('dark'));
+  });
+  (function initTheme() {
+    setTheme(false);
+  })();
+
+  // ===== Document state: floors, shapes, selection, view, mode flags =====
+  // The 10 fill colors offered by the color panel.
+  var PALETTE = ['#4f8cff', '#00008b', '#34c759', '#ff9f0a', '#ff2d55', '#af52de', '#00c7be', '#ff8a3d', '#5ac8fa', '#ffffff'];
+  var DEFAULT_FILL = '#4f8cff';
+  var DEFAULT_ALPHA = 0.3;
+  var lastColor = DEFAULT_FILL;
+  var floors = [{ name: 'Ground', rects: [], marker: null, nextId: 1 }];
+  var activeIndex = 0;
+  var rects = floors[0].rects;
+  var selId = null;
+  var marker = floors[0].marker;
+  var markerMode = false;
+  var editMode = false;
+  var selVtx = -1;
+  var lpTimer = null;
+  var viewMode = false;
+  // Multi-select mode (#selectBtn): selId stays the primary selection while
+  // selIds holds the extra selected shapes; both together form the group.
+  var selectMode = false;
+  var selIds = [];
+  // Master switch for the crosshair: hides it AND disables its gestures
+  // (double-tap-to-add and long-press-to-delete). Toggled by #crosshairBtn.
+  var crosshairEnabled = true;
+  // Fuzzy search mode: searchMatches holds {fi, id} pairs of every shape that
+  // matched the current query on the active floor (drawn as rippling rings).
+  var searchMode = false;
+  var searchMatches = [];
+  var view = { x: -150, y: -110, scale: 1, rot: 0 };
+  var MIN_W = 24, MIN_H = 18;
+  var undoStack = [], redoStack = [], pendingState = null;
+  var MAX_HISTORY = 50;
+
+  // Repoint the live aliases (rects/marker) at the active floor and clear
+  // the selection + edit-vertex selection. Must be called after any floor switch.
+  function syncActiveFloor() {
+    var f = floors[activeIndex];
+    rects = f.rects;
+    marker = f.marker;
+    selId = null;
+    selIds.length = 0;
+    selVtx = -1;
+  }
+
+  // ===== Undo / redo: full-document snapshots =====
+  // capture() deep-copies {activeIndex, floors[]} (pts and marker included).
+  // pushHistory() stores a snapshot for undo; the live camera `view` is NOT
+  // part of history, but each floor's saved per-floor view rides along inside
+  // the floor object so it survives undo/redo.
+  function capture() {
+    return {
+      activeIndex: activeIndex,
+      floors: floors.map(function (f) {
+        return {
+          name: f.name,
+          nextId: f.nextId,
+          view: f.view || null,
+          marker: f.marker ? { x: f.marker.x, y: f.marker.y } : null,
+          rects: f.rects.map(function (r) {
+            return {
+              id: r.id, name: r.name, cx: r.cx, cy: r.cy, w: r.w, h: r.h, rot: r.rot,
+              color: r.color, alpha: r.alpha, notes: r.notes || '',
+              pts: r.pts ? r.pts.map(function (p) { return { x: p.x, y: p.y }; }) : null
+            };
+          })
+        };
+      })
+    };
+  }
+  function stateEqual(a, b) {
+    if (a.activeIndex !== b.activeIndex) return false;
+    if (a.floors.length !== b.floors.length) return false;
+    for (var i = 0; i < a.floors.length; i++) {
+      var fa = a.floors[i], fb = b.floors[i];
+      if (fa.name !== fb.name || fa.nextId !== fb.nextId) return false;
+      if (!!fa.marker !== !!fb.marker) return false;
+      if (fa.marker && (fa.marker.x !== fb.marker.x || fa.marker.y !== fb.marker.y)) return false;
+      if (fa.rects.length !== fb.rects.length) return false;
+      for (var j = 0; j < fa.rects.length; j++) {
+        var ra = fa.rects[j], rb = fb.rects[j];
+        if (ra.id !== rb.id || ra.cx !== rb.cx || ra.cy !== rb.cy || ra.w !== rb.w ||
+            ra.h !== rb.h || ra.rot !== rb.rot || ra.name !== rb.name ||
+            ra.color !== rb.color || ra.alpha !== rb.alpha) return false;
+        var pa = ra.pts, pb = rb.pts;
+        if (!!pa !== !!pb) return false;
+        if (pa) {
+          if (pa.length !== pb.length) return false;
+          for (var k = 0; k < pa.length; k++) {
+            if (pa[k].x !== pb[k].x || pa[k].y !== pb[k].y) return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+  function pushHistory(state) {
+    undoStack.push(state);
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack.length = 0;
+    updateToolbar();
+  }
+  function beginGesture() { pendingState = capture(); }
+  function commitGesture() {
+    if (!pendingState) return;
+    var cur = capture();
+    if (!stateEqual(pendingState, cur)) pushHistory(pendingState);
+    pendingState = null;
+  }
+  function restoreState(s) {
+    floors = s.floors.map(function (f) {
+      return {
+        name: f.name,
+        nextId: f.nextId,
+        view: f.view || null,
+        marker: f.marker ? { x: f.marker.x, y: f.marker.y } : null,
+        rects: f.rects.map(function (r) {
+          return Object.assign({}, r, {
+            pts: r.pts ? r.pts.map(function (p) { return { x: p.x, y: p.y }; }) : null
+          });
+        })
+      };
+    });
+    activeIndex = Math.min(s.activeIndex, floors.length - 1);
+    syncActiveFloor();
+    restoreFloorView(activeIndex);
+    renderFloorTabs();
+    updateToolbar();
+  }
+  function undo() {
+    if (!undoStack.length) return;
+    redoStack.push(capture());
+    restoreState(undoStack.pop());
+  }
+  function redo() {
+    if (!redoStack.length) return;
+    undoStack.push(capture());
+    restoreState(redoStack.pop());
+  }
+
+  function hexToRgba(hex, a) {
+    var h = hex.replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var r = parseInt(h.substr(0, 2), 16);
+    var g = parseInt(h.substr(2, 2), 16);
+    var b = parseInt(h.substr(4, 2), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
+
+  // ===== Shapes: creation / lookup =====
+  function makeRect(cx, cy) {
+    var f = floors[activeIndex];
+    var r = {
+      id: f.nextId,
+      name: '',
+      notes: '',
+      cx: cx, cy: cy,
+      w: 130, h: 84, rot: 0,
+      color: lastColor,
+      alpha: DEFAULT_ALPHA,
+      pts: null
+    };
+    f.nextId++;
+    rects.push(r);
+    return r;
+  }
+  // Perfect deep copy of a rect (new id, same name/notes/geometry/style/points).
+  function copyRect(r) {
+    var f = floors[activeIndex];
+    return {
+      id: f.nextId++,
+      name: r.name,
+      notes: r.notes || '',
+      cx: r.cx, cy: r.cy,
+      w: r.w, h: r.h, rot: r.rot,
+      color: r.color, alpha: r.alpha,
+      pts: r.pts ? r.pts.map(function (p) { return { x: p.x, y: p.y }; }) : null
+    };
+  }
+  // Duplicates the selected rect, offset a bit to the RIGHT of the original so
+  // the copy never covers it. Keeps the original selected.
+  function duplicateSelected() {
+    var r = getSel();
+    if (!r) return;
+    var idx = rects.indexOf(r);
+    var cp = copyRect(r);
+    cp.cx = r.cx + 90;
+    cp.cy = r.cy - 60;
+    rects.splice(idx + 1, 0, cp);
+    updateToolbar();
+    hintFlash('Duplicated ' + (r.name || 'shape'));
+  }
+  function getSel() { return findRect(selId); }
+  function findRect(id) {
+    for (var i = 0; i < rects.length; i++) if (rects[i].id === id) return rects[i];
+    return null;
+  }
+  // ===== Multi-select helpers =====
+  // selId is the primary (single) selection; selIds are the extra shapes picked
+  // in Select mode. Together they are the current selection group.
+  function selectedCount() { return (selId !== null ? 1 : 0) + selIds.length; }
+  function selectedIdsList() {
+    var ids = [];
+    if (selId !== null) ids.push(selId);
+    for (var i = 0; i < selIds.length; i++) ids.push(selIds[i]);
+    return ids;
+  }
+  // Toggle a shape in/out of the selection. Toggling the primary off promotes
+  // the most recently picked extra shape to primary.
+  function toggleSelect(id) {
+    if (selId === id) {
+      if (selIds.length === 0) selId = null;
+      else selId = selIds.pop();
+    } else {
+      var i = selIds.indexOf(id);
+      if (i >= 0) selIds.splice(i, 1);
+      else {
+        if (selId !== null) selIds.push(selId);
+        selId = id;
+      }
+    }
+  }
+  function clearSelection() {
+    selId = null;
+    selIds.length = 0;
+    selVtx = -1;
+  }
+  // ===== Floor tabs: render / switch / add / delete / rename =====
+  // Tabs are plain pointerdown targets: a quick press switches floors, a
+  // 500ms long-press (with <10px movement) opens the rename dialog, and the
+  // small x inside each tab requests deletion via the confirm overlay.
+  function renderFloorTabs() {
+    floorTabs.innerHTML = '';
+    floors.forEach(function (f, i) {
+      var wrap = document.createElement('div');
+      wrap.className = 'ftab-wrap' + (i === activeIndex ? ' active' : '');
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ftab';
+      b.textContent = f.name;
+      // Press-dance: 500ms timer = long-press rename; >10px move cancels it;
+      // clean release before either = quick tap that switches floors.
+      b.addEventListener('pointerdown', function (e) {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        var x0 = e.clientX, y0 = e.clientY;
+        var long = false, moved = false;
+        var timer = setTimeout(function () {
+          long = true;
+          openFloorRename(i);
+        }, 500);
+        function cleanup() {
+          b.removeEventListener('pointerup', up);
+          b.removeEventListener('pointercancel', cancel);
+          b.removeEventListener('pointermove', move);
+        }
+        function up() {
+          cleanup();
+          if (timer) clearTimeout(timer);
+          if (!long && !moved) switchFloor(i);
+        }
+        function move(ev) {
+          if (!moved && (Math.abs(ev.clientX - x0) > 10 || Math.abs(ev.clientY - y0) > 10)) {
+            moved = true;
+            if (timer) { clearTimeout(timer); timer = null; }
+          }
+        }
+        function cancel() {
+          cleanup();
+          if (timer) clearTimeout(timer);
+        }
+        b.addEventListener('pointerup', up);
+        b.addEventListener('pointercancel', cancel);
+        b.addEventListener('pointermove', move);
+      });
+      wrap.appendChild(b);
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'ftab-del';
+      del.textContent = '\u00D7';
+      del.setAttribute('aria-label', 'Delete floor ' + f.name);
+      del.disabled = floors.length <= 1;
+      del.addEventListener('click', function () { askDeleteFloor(i); });
+      wrap.appendChild(del);
+      floorTabs.appendChild(wrap);
+    });
+    var add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'ftab-add';
+    add.textContent = '+';
+    add.setAttribute('aria-label', 'Add floor');
+    add.addEventListener('click', addFloor);
+    floorTabs.appendChild(add);
+  }
+  // Switching floors persists the outgoing camera and restores the incoming
+  // floor's saved camera so each floor feels independently panned/zoomed.
+  function switchFloor(i) {
+    if (i === activeIndex) return;
+    var dir = i > activeIndex ? 1 : -1;
+    showFloorIndicator(dir);
+    saveFloorView();
+    activeIndex = i;
+    syncActiveFloor();
+    cancelViewAnim();
+    restoreFloorView(i);
+    renderFloorTabs();
+    updateToolbar();
+  }
+  // Arrow glyphs for the floor-change indicator: upload when moving to a
+  // higher floor, download when moving to a lower one.
+  var ICON_UP = '<path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>';
+  var ICON_DOWN = '<path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>';
+  var indicatorT = null;
+  // Plays the small arrow pop in the top-left corner. Reuses the same
+  // reflow-then-animate trick; a synchronous timeout forces it invisible
+  // even if the CSS animation is throttled, so it never lingers.
+  function showFloorIndicator(dir) {
+    clearTimeout(indicatorT);
+    floorIndicator.className = '';
+    floorIndicator.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">' +
+      (dir > 0 ? ICON_UP : ICON_DOWN) + '</svg>';
+    void floorIndicator.offsetHeight;
+    floorIndicator.className = dir > 0 ? 'show-up' : 'show-down';
+    indicatorT = setTimeout(function () {
+      floorIndicator.className = '';
+    }, 650);
+  }
+  // Per-floor camera: snapshot the live `view` into the current floor, or pull
+  // a floor's saved view back into the live `view` (no view yet = default).
+  function saveFloorView() {
+    floors[activeIndex].view = { x: view.x, y: view.y, scale: view.scale, rot: view.rot };
+  }
+  function restoreFloorView(i) {
+    var fv = floors[i].view;
+    if (fv) {
+      view.x = fv.x;
+      view.y = fv.y;
+      view.scale = fv.scale;
+      view.rot = fv.rot || 0;
+    }
+  }
+  function addFloor() {
+    var n = floors.length + 1;
+    var name = 'Floor ' + n;
+    pushHistory(capture());
+    floors.push({ name: name, rects: [], marker: null, nextId: 1 });
+    activeIndex = floors.length - 1;
+    syncActiveFloor();
+    renderFloorTabs();
+    updateToolbar();
+    hintFlash('Added floor "' + name + '"');
+  }
+  function deleteFloor(i) {
+    if (floors.length <= 1) { hintFlash('Cannot delete the only floor'); return; }
+    pushHistory(capture());
+    var name = floors[i].name;
+    floors.splice(i, 1);
+    if (activeIndex > i) activeIndex--;
+    else if (activeIndex >= floors.length) activeIndex = floors.length - 1;
+    syncActiveFloor();
+    renderFloorTabs();
+    updateToolbar();
+    hintFlash('Deleted floor "' + name + '"');
+  }
+  // Duplicates a floor: full copy of name/view/marker/rects (incl. notes and
+  // polygon points) inserted right after the original. Undoable.
+  function duplicateFloor(i) {
+    var f = floors[i];
+    if (!f) return;
+    pushHistory(capture());
+    var maxId = 0;
+    var rects = f.rects.map(function (r) {
+      maxId = Math.max(maxId, r.id);
+      return Object.assign({}, r, {
+        pts: r.pts ? r.pts.map(function (p) { return { x: p.x, y: p.y }; }) : null
+      });
+    });
+    var copy = {
+      name: 'Copy of ' + f.name,
+      nextId: maxId + 1,
+      view: f.view ? { x: f.view.x, y: f.view.y, scale: f.view.scale, rot: f.view.rot || 0 } : null,
+      marker: f.marker ? { x: f.marker.x, y: f.marker.y } : null,
+      rects: rects
+    };
+    floors.splice(i + 1, 0, copy);
+    if (activeIndex > i) activeIndex++;
+    renderFloorTabs();
+    updateToolbar();
+    hintFlash('Duplicated floor "' + f.name + '"');
+  }
+  var confirmPending = -1;
+  function askDeleteFloor(i) {
+    if (floors.length <= 1 || i < 0 || i >= floors.length) return;
+    confirmPending = i;
+    confirmTitle.textContent = 'Delete floor "' + floors[i].name + '"?';
+    confirmOverlay.classList.add('show');
+  }
+  function closeConfirm() {
+    confirmOverlay.classList.remove('show');
+    confirmPending = -1;
+  }
+  confirmOk.addEventListener('click', function () {
+    var i = confirmPending;
+    closeConfirm();
+    if (i >= 0 && i < floors.length) deleteFloor(i);
+  });
+  confirmCancel.addEventListener('click', closeConfirm);
+  confirmOverlay.addEventListener('pointerdown', function (e) {
+    if (e.target === confirmOverlay) closeConfirm();
+  });
+  infoBtn.addEventListener('click', function () { infoOverlay.classList.add('show'); });
+  infoClose.addEventListener('click', function () { infoOverlay.classList.remove('show'); });
+  infoOverlay.addEventListener('pointerdown', function (e) {
+    if (e.target === infoOverlay) infoOverlay.classList.remove('show');
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && infoOverlay.classList.contains('show')) infoOverlay.classList.remove('show');
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && confirmOverlay.classList.contains('show')) closeConfirm();
+  });
+
+
+  // ===== Coordinate transforms: screen <-> world <-> shape-local =====
+  // s2w/w2s map between screen pixels and world units through the camera
+  // `view` (which may rotate the view only - shapes are never rotated). Below
+  // that, the shape-local helpers rotate points into world space.
+  function viewRot() { return view.rot * Math.PI / 180; }
+  function s2w(sx, sy) {
+    var rad = viewRot(), c = Math.cos(rad), s = Math.sin(rad);
+    var u = sx / view.scale, v = sy / view.scale;
+    return { x: view.x + u * c + v * s, y: view.y - u * s + v * c };
+  }
+  function w2s(wx, wy) {
+    var rad = viewRot(), c = Math.cos(rad), s = Math.sin(rad);
+    var dx = wx - view.x, dy = wy - view.y;
+    return { x: (dx * c - dy * s) * view.scale, y: (dx * s + dy * c) * view.scale };
+  }
+  function rotFrame(x, y, a) {
+    var c = Math.cos(a), s = Math.sin(a);
+    return { x: x * c - y * s, y: x * s + y * c };
+  }
+  function localToWorld(r, lx, ly) {
+    var p = rotFrame(lx, ly, r.rot);
+    return { x: r.cx + p.x, y: r.cy + p.y };
+  }
+  function rectHit(r, wx, wy) {
+    var dx = wx - r.cx, dy = wy - r.cy;
+    var c = Math.cos(-r.rot), s = Math.sin(-r.rot);
+    var lx = dx * c - dy * s, ly = dx * s + dy * c;
+    return Math.abs(lx) <= r.w / 2 && Math.abs(ly) <= r.h / 2;
+  }
+  // Selection frame for boxes AND polygons. A plain box is exactly its own
+  // r.w/r.h; a polygon's r.w/r.h are stale (they describe the box it was born
+  // from), so every handle position is derived from the ACTUAL vertex bounding
+  // box (shapeBoxLocal) instead. Boxes keep their old positions exactly.
+  function cornerWorlds(r) {
+    var b = shapeBoxLocal(r);
+    return [
+      localToWorld(r, b.minX, b.minY),
+      localToWorld(r, b.maxX, b.minY),
+      localToWorld(r, b.maxX, b.maxY),
+      localToWorld(r, b.minX, b.maxY)
+    ];
+  }
+  function topMidWorld(r) {
+    var b = shapeBoxLocal(r);
+    return localToWorld(r, (b.minX + b.maxX) / 2, b.minY);
+  }
+  function rotHandleWorld(r) {
+    var off = 30 / view.scale;
+    var b = shapeBoxLocal(r);
+    return localToWorld(r, (b.minX + b.maxX) / 2, b.minY - off);
+  }
+  // Duplicate button: mirrors the rotate handle but floats above the top-RIGHT
+  // corner (right of the rotate button, same standoff height).
+  function dupHandleWorld(r) {
+    var off = 30 / view.scale;
+    var b = shapeBoxLocal(r);
+    return localToWorld(r, b.maxX, b.minY - off);
+  }
+  // Move handle: opposite the rotate handle, dangling below the bottom edge
+  // with the same standoff. Dragging it moves the shape immediately.
+  function botMidWorld(r) {
+    var b = shapeBoxLocal(r);
+    return localToWorld(r, (b.minX + b.maxX) / 2, b.maxY);
+  }
+  function moveHandleWorld(r) {
+    var off = 30 / view.scale;
+    var b = shapeBoxLocal(r);
+    return localToWorld(r, (b.minX + b.maxX) / 2, b.maxY + off);
+  }
+
+  // ===== Polygon shape model (Edit mode) =====
+  // A shape is either a plain box (pts == null) or a polygon stored as local
+  // points (pts). These helpers make both cases interchangeable everywhere.
+  // The 4 corners of a box shape in local (unrotated) coordinates.
+  function rectCornersLocal(r) {
+    var hw = r.w / 2, hh = r.h / 2;
+    return [
+      { x: -hw, y: -hh }, { x: hw, y: -hh },
+      { x: hw, y: hh }, { x: -hw, y: hh }
+    ];
+  }
+  function shapeVertsLocal(r) {
+    if (r.pts && r.pts.length >= 3) return r.pts;
+    return rectCornersLocal(r);
+  }
+  function shapeVertCount(r) { return (r.pts && r.pts.length >= 3) ? r.pts.length : 4; }
+  function shapeVertexWorld(r, i) {
+    var pts = shapeVertsLocal(r);
+    return localToWorld(r, pts[i].x, pts[i].y);
+  }
+  function shapeWorldVerts(r) {
+    var pts = shapeVertsLocal(r);
+    var out = [];
+    for (var i = 0; i < pts.length; i++) out.push(localToWorld(r, pts[i].x, pts[i].y));
+    return out;
+  }
+  function shapeBoxLocal(r) {
+    var pts = shapeVertsLocal(r);
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      if (pts[i].x < minX) minX = pts[i].x;
+      if (pts[i].x > maxX) maxX = pts[i].x;
+      if (pts[i].y < minY) minY = pts[i].y;
+      if (pts[i].y > maxY) maxY = pts[i].y;
+    }
+    return { w: maxX - minX, h: maxY - minY, minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+  }
+  function pointInPolygon(verts, x, y) {
+    var inside = false;
+    for (var i = 0, j = verts.length - 1; i < verts.length; j = i++) {
+      var xi = verts[i].x, yi = verts[i].y, xj = verts[j].x, yj = verts[j].y;
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function worldToLocal(r, wx, wy) {
+    return rotFrame(wx - r.cx, wy - r.cy, -r.rot);
+  }
+  function shapeHit(r, wx, wy) {
+    if (r.pts && r.pts.length >= 3) return pointInPolygon(shapeWorldVerts(r), wx, wy);
+    return rectHit(r, wx, wy);
+  }
+  function ptInRect(pt, wr) {
+    return pt.x >= wr.minX && pt.x <= wr.maxX && pt.y >= wr.minY && pt.y <= wr.maxY;
+  }
+  // Marquee test: does the shape overlap an axis-aligned world-space rect?
+  // True when any shape vertex is inside, any rect corner is inside the shape,
+  // or the shape centre is inside the rect (covers shapes that fully enclose
+  // the marquee).
+  function shapeIntersectsWorldRect(r, wr) {
+    var verts = shapeWorldVerts(r);
+    var i;
+    for (i = 0; i < verts.length; i++) if (ptInRect(verts[i], wr)) return true;
+    var cs = [[wr.minX, wr.minY], [wr.maxX, wr.minY], [wr.maxX, wr.maxY], [wr.minX, wr.maxY]];
+    for (i = 0; i < 4; i++) if (containsStrict(r, cs[i][0], cs[i][1])) return true;
+    return ptInRect({ x: r.cx, y: r.cy }, wr);
+  }
+  // Lazily turn a box shape into a 4-corner polygon (local coords). Called on
+  // the first Edit-mode action so legacy/box shapes become editable vertices.
+  function ensurePts(r) {
+    if (!r.pts) {
+      r.pts = rectCornersLocal(r);
+    }
+    return r.pts;
+  }
+  // Insert a vertex at the midpoint of edge `i` (adds the preceding vertex to
+  // match the index convention). Midpoints are rotation-invariant.
+  function addVtx(r, i) {
+    if (r.pts.length >= 20) { hintFlash('Maximum 20 vertices'); return -1; }
+    var a = r.pts[i], b = r.pts[(i + 1) % r.pts.length];
+    r.pts.splice(i + 1, 0, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    return i + 1;
+  }
+  // Dropping a vertex below 3 would make an invalid polygon, so that's blocked.
+  function removeVtx(r, i) {
+    if (r.pts.length <= 3) { hintFlash('A shape needs at least 3 vertices'); return false; }
+    r.pts.splice(i, 1);
+    return true;
+  }
+
+  // ===== Drawing: grid, shapes, labels, selection, marker =====
+  // The rAF loop calls draw() every frame; only drawShapes() depends on the
+  // border-merge groups (see below).
+  function drawGrid(C) {
+    var scale = view.scale;
+    var bases = [5, 10, 25, 50, 100, 250, 500, 1000];
+    var minor = bases[0], i;
+    for (i = 0; i < bases.length; i++) {
+      if (bases[i] * scale >= 22) { minor = bases[i]; break; }
+    }
+    var major = minor * 5;
+    // Visible world rectangle = the four inverse-rotated screen corners plus
+    // the camera offset. Its axis-aligned bounds cover every grid line that
+    // could appear on screen, so lines are drawn in world space through the
+    // same rotated transform as the shapes (the grid rotates with the view).
+    var rad = viewRot();
+    var c = Math.cos(rad), s = Math.sin(rad);
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    var u = [0, W / scale, 0, W / scale], v = [0, 0, H / scale, H / scale];
+    for (i = 0; i < 4; i++) {
+      var wx = view.x + u[i] * c + v[i] * s;
+      var wy = view.y - u[i] * s + v[i] * c;
+      if (wx < minX) minX = wx; if (wx > maxX) maxX = wx;
+      if (wy < minY) minY = wy; if (wy > maxY) maxY = wy;
+    }
+    ctx.save();
+    ctx.scale(scale, scale);
+    ctx.rotate(rad);
+    ctx.translate(-view.x, -view.y);
+    ctx.lineWidth = 1 / scale;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    for (var x = Math.floor(minX / minor) * minor; x <= maxX; x += minor) {
+      ctx.moveTo(x, minY); ctx.lineTo(x, maxY);
+    }
+    for (var y = Math.floor(minY / minor) * minor; y <= maxY; y += minor) {
+      ctx.moveTo(minX, y); ctx.lineTo(maxX, y);
+    }
+    ctx.strokeStyle = C.minor;
+    ctx.stroke();
+    ctx.beginPath();
+    for (x = Math.floor(minX / major) * major; x <= maxX; x += major) {
+      ctx.moveTo(x, minY); ctx.lineTo(x, maxY);
+    }
+    for (y = Math.floor(minY / major) * major; y <= maxY; y += major) {
+      ctx.moveTo(minX, y); ctx.lineTo(maxX, y);
+    }
+    ctx.strokeStyle = C.major;
+    ctx.stroke();
+    ctx.beginPath();
+    if (minX <= 0 && maxX >= 0) { ctx.moveTo(0, minY); ctx.lineTo(0, maxY); }
+    if (minY <= 0 && maxY >= 0) { ctx.moveTo(minX, 0); ctx.lineTo(maxX, 0); }
+    ctx.strokeStyle = C.axes;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ===== Border merging: render same-color neighbours as one shape =====
+  // Shapes are drawn in a containment order: any shape fully inside another is
+  // drawn after (on top of) its container so its border always stays fully
+  // visible instead of being washed out by the container's fill.
+  var drawOrder = [];
+  var containedIds = {};
+  // True when `inner` lies entirely (strictly) inside `outer`. Checks every
+  // vertex of the inner shape, which is exact for boxes and convex shapes.
+  function shapeFullyInside(inner, outer) {
+    var i, wv;
+    if (inner.pts && inner.pts.length >= 3) wv = shapeWorldVerts(inner);
+    else wv = cornerWorlds(inner);
+    for (i = 0; i < wv.length; i++) {
+      if (!containsStrict(outer, wv[i].x, wv[i].y)) return false;
+    }
+    return true;
+  }
+  // Count, for every shape, how many OTHER shapes fully contain it. Sorting by
+  // that count ascending is a valid topological order: a container always has
+  // strictly fewer containers than its contents, so it is drawn first. Unrelated
+  // shapes share the same count and keep their original relative order.
+  function computeDrawOrder() {
+    var n = rects.length;
+    var counts = new Array(n);
+    var i, j;
+    for (i = 0; i < n; i++) counts[i] = 0;
+    for (i = 0; i < n; i++) {
+      for (j = 0; j < n; j++) {
+        if (i !== j && shapeFullyInside(rects[i], rects[j])) counts[i]++;
+      }
+    }
+    containedIds = {};
+    for (i = 0; i < n; i++) if (counts[i] > 0) containedIds[rects[i].id] = true;
+    drawOrder = new Array(n);
+    for (i = 0; i < n; i++) drawOrder[i] = i;
+    drawOrder.sort(function (a, b) {
+      if (counts[a] !== counts[b]) return counts[a] - counts[b];
+      return a - b;
+    });
+  }
+  function colorKey(r) {
+    return (r.color || '').toLowerCase() + '|' + Number(r.alpha).toFixed(3);
+  }
+  function buildGroups() {
+    var map = {};
+    var order = [];
+    for (var oi = 0; oi < drawOrder.length; oi++) {
+      var r = rects[drawOrder[oi]];
+      var k = colorKey(r);
+      var g = map[k];
+      if (!g) { g = map[k] = { rects: [], min: oi }; order.push(g); }
+      g.rects.push(r);
+    }
+    order.sort(function (a, b) { return a.min - b.min; });
+    return order;
+  }
+  function containsStrict(r, wx, wy) {
+    if (r.pts && r.pts.length >= 3) return pointInPolygon(shapeWorldVerts(r), wx, wy);
+    var dx = wx - r.cx, dy = wy - r.cy;
+    var c = Math.cos(-r.rot), s = Math.sin(-r.rot);
+    var lx = dx * c - dy * s, ly = dx * s + dy * c;
+    return Math.abs(lx) < r.w / 2 - 0.001 && Math.abs(ly) < r.h / 2 - 0.001;
+  }
+  function edgeWorld(r, ei) {
+    var pts = shapeVertsLocal(r);
+    var n = pts.length;
+    var a = localToWorld(r, pts[ei].x, pts[ei].y);
+    var b = localToWorld(r, pts[(ei + 1) % n].x, pts[(ei + 1) % n].y);
+    return { a: a, b: b };
+  }
+  function pointCovered(group, self, wx, wy) {
+    for (var i = 0; i < group.length; i++) {
+      var q = group[i];
+      if (q === self) continue;
+      if (containsStrict(q, wx, wy)) return true;
+    }
+    return false;
+  }
+  function rectPath(ctx, r) {
+    ctx.save();
+    ctx.translate(r.cx, r.cy);
+    ctx.rotate(r.rot);
+    ctx.rect(-r.w / 2, -r.h / 2, r.w, r.h);
+    ctx.restore();
+  }
+  function shapePath(ctx, r) {
+    if (r.pts && r.pts.length >= 3) {
+      ctx.save();
+      ctx.translate(r.cx, r.cy);
+      ctx.rotate(r.rot);
+      ctx.moveTo(r.pts[0].x, r.pts[0].y);
+      for (var i = 1; i < r.pts.length; i++) ctx.lineTo(r.pts[i].x, r.pts[i].y);
+      ctx.closePath();
+      ctx.restore();
+    } else {
+      rectPath(ctx, r);
+    }
+  }
+  // One outline path for a shape (box or polygon), in world units, for the
+  // union fill of each group. Border strokes are emitted separately below.
+  function drawShapes() {
+    computeDrawOrder();
+    var groups = buildGroups();
+    var seg = 14 / view.scale;
+    ctx.save();
+    ctx.scale(view.scale, view.scale);
+    ctx.rotate(viewRot());
+    ctx.translate(-view.x, -view.y);
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    for (var gi = 0; gi < groups.length; gi++) {
+      var g = groups[gi].rects;
+      var r0 = g[0];
+      ctx.beginPath();
+      for (var i = 0; i < g.length; i++) shapePath(ctx, g[i]);
+      ctx.fillStyle = hexToRgba(r0.color, r0.alpha);
+      ctx.fill();
+      ctx.strokeStyle = r0.color;
+      ctx.lineWidth = 2.5 / view.scale;
+      ctx.beginPath();
+      for (i = 0; i < g.length; i++) {
+        var r = g[i];
+        // Stroke each edge in ~14px world-unit segments; any segment whose
+        // midpoint falls inside a sibling of the same color is a shared
+        // internal border and gets skipped (moveTo gap) -> clean union look.
+        // Shapes fully inside another shape are exempt: their border is an
+        // interior boundary (a hole), not a shared edge, so it stays visible.
+        for (var e = 0; e < shapeVertCount(r); e++) {
+          var ed = edgeWorld(r, e);
+          var len = Math.hypot(ed.b.x - ed.a.x, ed.b.y - ed.a.y);
+          var n = Math.max(1, Math.ceil(len / seg));
+          var dx = (ed.b.x - ed.a.x) / n, dy = (ed.b.y - ed.a.y) / n;
+          ctx.moveTo(ed.a.x, ed.a.y);
+          for (var s = 1; s <= n; s++) {
+            if (!containedIds[r.id] && pointCovered(g, r, ed.a.x + dx * (s - 0.5), ed.a.y + dy * (s - 0.5))) {
+              ctx.moveTo(ed.a.x + dx * s, ed.a.y + dy * s);
+            } else {
+              ctx.lineTo(ed.a.x + dx * s, ed.a.y + dy * s);
+            }
+          }
+        }
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawLabel(r, C) {
+    var cx = r.cx, cy = r.cy, bw = r.w, bh = r.h;
+    if (r.pts && r.pts.length >= 3) {
+      var wv = shapeWorldVerts(r);
+      var sx2 = 0, sy2 = 0;
+      for (var i = 0; i < wv.length; i++) { sx2 += wv[i].x; sy2 += wv[i].y; }
+      cx = sx2 / wv.length;
+      cy = sy2 / wv.length;
+      var box = shapeBoxLocal(r);
+      bw = box.w; bh = box.h;
+    }
+    var p = w2s(cx, cy);
+    if (p.x < -120 || p.x > W + 120 || p.y < -120 || p.y > H + 120) return;
+    var base = Math.max(12, Math.min(bw * 0.17, 40));
+    var size = Math.max(11, Math.min(base * view.scale, 54));
+    ctx.font = '600 ' + size + 'px system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    var maxPx = Math.max(20, bw * view.scale - 10);
+    var txt = r.name || '';
+    if (ctx.measureText(txt).width > maxPx) {
+      var t2 = txt;
+      while (t2.length > 1 && ctx.measureText(t2 + '...').width > maxPx) t2 = t2.slice(0, -1);
+      txt = t2 + '...';
+    }
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(3, size / 5);
+    ctx.strokeStyle = C.labelStroke;
+    ctx.strokeText(txt, p.x, p.y);
+    ctx.fillStyle = C.labelFill;
+    ctx.fillText(txt, p.x, p.y);
+  }
+
+  function drawHandle(x, y) {
+    var s = 9;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1b6fd0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.rect(x - s, y - s, s * 2, s * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  function drawRotHandle(x, y) {
+    var s = 9;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1b6fd0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  // Move handle: circle like the rotate handle, with four outward arrows
+  // (N/S/E/W) as the classic "move" glyph.
+  function drawMoveHandle(x, y) {
+    var s = 9;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1b6fd0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = '#1b6fd0';
+    ctx.fillStyle = '#1b6fd0';
+    ctx.lineWidth = 1.5;
+    var dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    for (var i = 0; i < 4; i++) {
+      var dx = dirs[i][0], dy = dirs[i][1];
+      var tx = x + dx * 7, ty = y + dy * 7;
+      var bx = x + dx * 4.5, by = y + dy * 4.5;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(bx - dy * 1.8, by + dx * 1.8);
+      ctx.lineTo(bx + dy * 1.8, by - dx * 1.8);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  function roundRectPath(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  // Square duplicate button with a "duplicate layer" glyph inside: a back
+  // rounded sheet (outline) offset up-right, and a front rounded sheet filled.
+  function drawDupHandle(x, y) {
+    var s = 9;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1b6fd0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.rect(x - s, y - s, s * 2, s * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = '#1b6fd0';
+    ctx.fillStyle = '#1b6fd0';
+    ctx.lineWidth = 1.5;
+    roundRectPath(x, y - 6, 6, 6, 1.5);
+    ctx.stroke();
+    roundRectPath(x - 6, y, 6, 6, 1.5);
+    ctx.fill();
+  }
+
+  // Dashed outline around one shape (screen space) - the shared part of the
+  // single-selection highlight and each shape in a multi-selection group.
+  function drawSelectionOutline(r) {
+    var n = shapeVertCount(r);
+    var i, s;
+    ctx.strokeStyle = '#7ab8ff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 5]);
+    ctx.beginPath();
+    for (i = 0; i < n; i++) {
+      var wv = shapeVertexWorld(r, i);
+      s = w2s(wv.x, wv.y);
+      if (i === 0) ctx.moveTo(s.x, s.y);
+      else ctx.lineTo(s.x, s.y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawSelection(r) {
+    drawSelectionOutline(r);
+    if (editMode) return;
+
+    var tm = w2s(topMidWorld(r).x, topMidWorld(r).y);
+    var rh = w2s(rotHandleWorld(r).x, rotHandleWorld(r).y);
+    var dh = w2s(dupHandleWorld(r).x, dupHandleWorld(r).y);
+    var bm = w2s(botMidWorld(r).x, botMidWorld(r).y);
+    var mh = w2s(moveHandleWorld(r).x, moveHandleWorld(r).y);
+    ctx.beginPath();
+    ctx.moveTo(tm.x, tm.y);
+    ctx.lineTo(rh.x, rh.y);
+    ctx.moveTo(bm.x, bm.y);
+    ctx.lineTo(mh.x, mh.y);
+    ctx.stroke();
+
+    var pts = cornerWorlds(r);
+    for (var i = 0; i < 4; i++) {
+      var c = w2s(pts[i].x, pts[i].y);
+      drawHandle(c.x, c.y);
+    }
+    drawRotHandle(rh.x, rh.y);
+    drawDupHandle(dh.x, dh.y);
+    drawMoveHandle(mh.x, mh.y);
+  }
+
+  // Multi-selection: one dashed outline per selected shape, no handles.
+  function drawMultiSelection() {
+    var ids = selectedIdsList();
+    for (var i = 0; i < ids.length; i++) {
+      var r = findRect(ids[i]);
+      if (r) drawSelectionOutline(r);
+    }
+  }
+
+  function drawActiveHandle(x, y) {
+    var s = 9;
+    ctx.fillStyle = '#ff9800';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.rect(x - s, y - s, s * 2, s * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  function drawMidHandle(x, y) {
+    ctx.fillStyle = 'rgba(47,124,255,0.15)';
+    ctx.strokeStyle = '#2f7cff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  function drawEditHandles(r) {
+    var n = shapeVertCount(r);
+    for (var i = 0; i < n; i++) {
+      var wv = shapeVertexWorld(r, i);
+      var p = w2s(wv.x, wv.y);
+      if (i === selVtx) drawActiveHandle(p.x, p.y);
+      else drawHandle(p.x, p.y);
+    }
+    for (var e = 0; e < n; e++) {
+      var a = shapeVertexWorld(r, e);
+      var b = shapeVertexWorld(r, (e + 1) % n);
+      var mp = w2s((a.x + b.x) / 2, (a.y + b.y) / 2);
+      drawMidHandle(mp.x, mp.y);
+    }
+  }
+
+  // Red pulsing pin for the floor marker (world -> screen, animated halo).
+  function drawMarker() {
+    if (!marker) return;
+    var p = w2s(marker.x, marker.y);
+    var R = 16;
+    var cx = p.x, cy = p.y;
+    var t = (performance.now() % 1600) / 1600;
+    ctx.globalAlpha = 0.22 * (1 - t);
+    ctx.fillStyle = '#ea4335';
+    ctx.beginPath();
+    ctx.arc(cx, cy, R + 10 + t * 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = '#ea4335';
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#c02f1d';
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Crosshair marking the exact world point where the Add button drops a new
+  // rectangle (the centre of the screen). Drawn in world units so it pans and
+  // zooms together with the map, always showing where a shape will land.
+  function drawCrosshair(C) {
+    if (!crosshairEnabled) return;
+    var wp = s2w(W / 2, H / 2 - 20);
+    var p = w2s(wp.x, wp.y);
+    var arm = 16 / view.scale;
+    ctx.strokeStyle = C.cross;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(p.x - arm, p.y); ctx.lineTo(p.x - 4, p.y);
+    ctx.moveTo(p.x + 4, p.y); ctx.lineTo(p.x + arm, p.y);
+    ctx.moveTo(p.x, p.y - arm); ctx.lineTo(p.x, p.y - 4);
+    ctx.moveTo(p.x, p.y + 4); ctx.lineTo(p.x, p.y + arm);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Thick dashed orange outline around a matched shape (screen space).
+  // Notes matches are drawn green to distinguish them from name matches.
+  function drawSearchHighlight(r, isNotes) {
+    var v = shapeWorldVerts(r);
+    var first = w2s(v[0].x, v[0].y);
+    ctx.strokeStyle = isNotes ? '#4caf50' : '#ff9800';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 5]);
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    for (var i = 1; i < v.length; i++) {
+      var sp = w2s(v[i].x, v[i].y);
+      ctx.lineTo(sp.x, sp.y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // Expanding sonar rings pulsing out of a matched shape's centre. Each match
+  // is offset in phase so overlapping shapes ripple in sequence.
+  function drawSearchRipple(r, i, isNotes) {
+    var v = shapeWorldVerts(r);
+    var sx = 0, sy = 0;
+    for (var k = 0; k < v.length; k++) {
+      var sp = w2s(v[k].x, v[k].y);
+      sx += sp.x; sy += sp.y;
+    }
+    sx /= v.length; sy /= v.length;
+    var now = performance.now();
+    var rings = 2;
+    for (var k2 = 0; k2 < rings; k2++) {
+      var t = ((now / 1100) + i * 0.35 + k2 / rings) % 1;
+      var rad = 18 + t * 120;
+      ctx.strokeStyle = isNotes
+        ? 'rgba(76, 175, 80, ' + (0.9 * (1 - t)).toFixed(3) + ')'
+        : 'rgba(255, 152, 0, ' + (0.9 * (1 - t)).toFixed(3) + ')';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  // Draw highlight + ripples for every search match on the current floor.
+  function drawSearchHighlights() {
+    if (!searchMatches.length) return;
+    var fr = floors[activeIndex].rects;
+    for (var i = 0; i < searchMatches.length; i++) {
+      if (searchMatches[i].fi !== activeIndex) continue;
+      var r = null;
+      for (var j = 0; j < fr.length; j++) {
+        if (fr[j].id === searchMatches[i].id) { r = fr[j]; break; }
+      }
+      if (!r) continue;
+      drawSearchHighlight(r, searchMatches[i].notes);
+      drawSearchRipple(r, i, searchMatches[i].notes);
+    }
+  }
+
+  // Main render pipeline, run every animation frame.
+  // Rubber-band selection rectangle (Select mode, screen space): translucent
+  // blue fill + dashed border once the drag has passed the 8px threshold.
+  function drawMarquee() {
+    if (!marquee || !marquee.active) return;
+    var x = Math.min(marquee.sx, marquee.cx), y = Math.min(marquee.sy, marquee.cy);
+    var w = Math.abs(marquee.cx - marquee.sx), h = Math.abs(marquee.cy - marquee.sy);
+    ctx.fillStyle = 'rgba(47,124,255,0.12)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#2f7cff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+  }
+
+  function draw() {
+    var C = palette();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, W, H);
+    drawGrid(C);
+    drawShapes();
+    drawMarquee();
+    if (selectedCount() > 1) {
+      drawMultiSelection();
+    } else {
+      var s = getSel();
+      if (s) {
+        drawSelection(s);
+        if (editMode) drawEditHandles(s);
+      }
+    }
+    for (var i = 0; i < rects.length; i++) drawLabel(rects[i], C);
+    if (marker) drawMarker();
+    drawCrosshair(C);
+    drawSearchHighlights();
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  // ===== Hit testing =====
+  // Normal mode: rotation handle, then the 4 resize corners of the selection,
+  // then the topmost shape under the pointer, else pan.
+  // Edit mode (editHitTest): vertices, then edge midpoints, then shape, then pan.
+  var HIT_HANDLE = 30;
+  // Every shape under a world point, top to bottom (the order shapes are drawn
+  // in: contained shapes on top of their containers). Used by topShape and by
+  // the overlap-cycling in handleTap, so taps always pick exactly what is
+  // visible and repeated taps walk down through the stack.
+  function shapesAt(wx, wy) {
+    var out = [];
+    var i, j;
+    for (i = drawOrder.length - 1; i >= 0; i--) {
+      j = drawOrder[i];
+      if (shapeHit(rects[j], wx, wy)) out.push(rects[j]);
+    }
+    for (i = rects.length - 1; i >= 0; i--) {
+      if (out.indexOf(rects[i]) >= 0) continue;
+      if (shapeHit(rects[i], wx, wy)) out.push(rects[i]);
+    }
+    return out;
+  }
+  function topShape(wx, wy) {
+    var list = shapesAt(wx, wy);
+    return list.length ? list[0] : null;
+  }
+  function hitTest(sx, sy) {
+    var r = getSel();
+    if (r) {
+      var rh = w2s(rotHandleWorld(r).x, rotHandleWorld(r).y);
+      if (Math.hypot(sx - rh.x, sy - rh.y) <= 26) return { type: 'rotate', rect: r };
+      var dh = w2s(dupHandleWorld(r).x, dupHandleWorld(r).y);
+      if (Math.hypot(sx - dh.x, sy - dh.y) <= 26) return { type: 'dup', rect: r };
+      var cs = [];
+      var i, pts = cornerWorlds(r);
+      for (i = 0; i < 4; i++) cs.push(w2s(pts[i].x, pts[i].y));
+      for (i = 0; i < 4; i++) {
+        if (Math.hypot(sx - cs[i].x, sy - cs[i].y) <= HIT_HANDLE) return { type: 'resize', rect: r, corner: i };
+      }
+      var mh = w2s(moveHandleWorld(r).x, moveHandleWorld(r).y);
+      if (Math.hypot(sx - mh.x, sy - mh.y) <= 26) return { type: 'movehand', rect: r };
+    }
+    var wp = s2w(sx, sy);
+    var ts = topShape(wp.x, wp.y);
+    if (ts) return { type: 'move', rect: ts };
+    return { type: 'pan' };
+  }
+  function editHitTest(sx, sy) {
+    var r = getSel();
+    var wp = s2w(sx, sy);
+    if (r) {
+      var n = shapeVertCount(r);
+      var i, e, wv, ps;
+      for (i = 0; i < n; i++) {
+        wv = shapeVertexWorld(r, i);
+        ps = w2s(wv.x, wv.y);
+        if (Math.hypot(sx - ps.x, sy - ps.y) <= HIT_HANDLE) return { type: 'vtx', rect: r, i: i };
+      }
+      for (e = 0; e < n; e++) {
+        var a = shapeVertexWorld(r, e);
+        var b = shapeVertexWorld(r, (e + 1) % n);
+        ps = w2s((a.x + b.x) / 2, (a.y + b.y) / 2);
+        if (Math.hypot(sx - ps.x, sy - ps.y) <= HIT_HANDLE) return { type: 'edge', rect: r, i: e };
+      }
+    }
+    var ts = topShape(wp.x, wp.y);
+    if (ts) return { type: 'move', rect: ts };
+    return { type: 'pan' };
+  }
+
+  // ===== Pointer gestures =====
+  // One active pointer at a time sets `mode` + `drag` (pan/move/resize/rotate/
+  // marker/vtx); a second pointer switches to `pinch`. Motion handlers mutate
+  // the live data; commitGesture() decides whether to keep it in history.
+  var pointers = new Map();
+  var mode = null, drag = null, pinch = null;
+  var lastTap = { t: 0, x: 0, y: 0, rectId: null };
+  // Rubber-band box selection (Select mode): screen-space drag rectangle.
+  var marquee = null;
+  // Move mode: pending long-press state. A quick drag pans the view like
+  // normal; only a 500ms hold arms the action - group move when pressed on a
+  // selected shape, box-select when pressed on empty space.
+  var movePending = null;
+
+  function startPan(sx, sy) { drag = { sx: sx, sy: sy, vx: view.x, vy: view.y }; }
+  function doPan(sx, sy) {
+    var du = (sx - drag.sx) / view.scale, dv = (sy - drag.sy) / view.scale;
+    var rad = viewRot(), c = Math.cos(rad), s = Math.sin(rad);
+    view.x = drag.vx - (du * c + dv * s);
+    view.y = drag.vy - (-du * s + dv * c);
+  }
+  function startMove(r, sx, sy) { drag = { rect: r, sx: sx, sy: sy, scx: r.cx, scy: r.cy }; }
+  function doMove(sx, sy) {
+    var du = (sx - drag.sx) / view.scale, dv = (sy - drag.sy) / view.scale;
+    var rad = viewRot(), c = Math.cos(rad), s = Math.sin(rad);
+    drag.rect.cx = drag.scx + du * c + dv * s;
+    drag.rect.cy = drag.scy - du * s + dv * c;
+  }
+  // Select-mode: drag a whole group of shapes (primary + extras). Every shape
+  // records its start cx/cy and moves by the same view-rotation-corrected
+  // world delta. Polygon pts are LOCAL offsets from the centre (localToWorld),
+  // so shifting cx/cy alone moves them too - pts must NOT be touched here.
+  // One beginGesture/commitGesture wraps the whole move into a single undo entry.
+  function startMoveGroup(sx, sy) {
+    drag = { sx: sx, sy: sy, items: [] };
+    var ids = selectedIdsList();
+    for (var i = 0; i < ids.length; i++) {
+      var r = findRect(ids[i]);
+      if (!r) continue;
+      drag.items.push({ r: r, scx: r.cx, scy: r.cy });
+    }
+  }
+  function doMoveGroup(sx, sy) {
+    var du = (sx - drag.sx) / view.scale, dv = (sy - drag.sy) / view.scale;
+    var rad = viewRot(), c = Math.cos(rad), s = Math.sin(rad);
+    var wx = du * c + dv * s, wy = -du * s + dv * c;
+    for (var i = 0; i < drag.items.length; i++) {
+      var it = drag.items[i];
+      it.r.cx = it.scx + wx;
+      it.r.cy = it.scy + wy;
+    }
+  }
+  function startResize(r, ci) {
+    var opp = cornerWorlds(r)[(ci + 2) % 4];
+    var oppL = worldToLocal(r, opp.x, opp.y);
+    drag = { rect: r, oppX: opp.x, oppY: opp.y, oppLx: oppL.x, oppLy: oppL.y };
+  }
+  function doResize(px, py) {
+    var r = drag.rect;
+    var dx = px - drag.oppX, dy = py - drag.oppY;
+    var c = Math.cos(r.rot), s = Math.sin(r.rot);
+    var rx = dx * c + dy * s;
+    var ry = -dx * s + dy * c;
+    var nw = Math.max(MIN_W, Math.abs(rx));
+    var nh = Math.max(MIN_H, Math.abs(ry));
+    var sx = rx >= 0 ? 1 : -1, sy = ry >= 0 ? 1 : -1;
+    // Polygon shapes: scale every vertex about the opposite selection-frame
+    // corner so the dragged corner tracks the pointer while the shape keeps
+    // its shape. The frame comes from the ACTUAL vertex bounding box (not the
+    // stale r.w/r.h), and the anchor is pinned exactly by re-deriving cx/cy
+    // from it instead of assuming the box was centred on the origin.
+    if (r.pts && r.pts.length >= 3) {
+      var b = shapeBoxLocal(r);
+      var fw = Math.max(b.maxX - b.minX, 1e-6);
+      var fh = Math.max(b.maxY - b.minY, 1e-6);
+      var fx = nw / fw, fy = nh / fh;
+      for (var i = 0; i < r.pts.length; i++) {
+        r.pts[i].x = drag.oppLx + (r.pts[i].x - drag.oppLx) * fx;
+        r.pts[i].y = drag.oppLy + (r.pts[i].y - drag.oppLy) * fy;
+      }
+      var ac = rotFrame(drag.oppLx, drag.oppLy, r.rot);
+      r.cx = drag.oppX - ac.x;
+      r.cy = drag.oppY - ac.y;
+      return;
+    }
+    r.w = nw; r.h = nh;
+    var lc = rotFrame(sx * nw / 2, sy * nh / 2, r.rot);
+    r.cx = drag.oppX + lc.x;
+    r.cy = drag.oppY + lc.y;
+  }
+  function startRotate(r, sx, sy) {
+    var wp = s2w(sx, sy);
+    drag = { rect: r, baseRot: r.rot, baseAng: Math.atan2(wp.y - r.cy, wp.x - r.cx) };
+  }
+  function doRotate(sx, sy) {
+    var r = drag.rect;
+    var wp = s2w(sx, sy);
+    var ang = Math.atan2(wp.y - r.cy, wp.x - r.cx);
+    r.rot = drag.baseRot + (ang - drag.baseAng);
+  }
+
+  // Two-finger pinch: remember the scale + midpoint, then zoom the camera
+  // around the midpoint of the two fingers on every move.
+  function startPinch() {
+    movePending = null;
+    var pts = Array.from(pointers.values());
+    var d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    pinch = {
+      baseScale: view.scale,
+      baseWorld: s2w((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2),
+      baseMid: { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 },
+      baseDist: d
+    };
+    mode = 'pinch';
+    drag = null;
+  }
+  function doPinch() {
+    var pts = Array.from(pointers.values());
+    var d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    var m = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+    var ns = Math.max(0.05, Math.min(10, pinch.baseScale * (d / pinch.baseDist)));
+    // Keep the world point under the fingers' midpoint fixed while zooming.
+    view.scale = ns;
+    var rad = viewRot(), c = Math.cos(rad), s = Math.sin(rad);
+    view.x = pinch.baseWorld.x - (m.x / ns * c + m.y / ns * s);
+    view.y = pinch.baseWorld.y - (-m.x / ns * s + m.y / ns * c);
+  }
+
+  // ===== Toolbar buttons: enabled/disabled state =====
+  function updateToolbar() {
+    var has = !!getSel();
+    var multi = selectedCount() > 1;
+    var v = viewMode;
+    addBtn.disabled = v;
+    editBtn.disabled = v;
+    selectBtn.disabled = v;
+    renameBtn.disabled = v || !has || multi;
+    delBtn.disabled = v || !has;
+    colorBtn.disabled = v || !has || multi;
+    notesBtn.disabled = v || !has || multi;
+    undoBtn.disabled = v || undoStack.length === 0;
+    redoBtn.disabled = v || redoStack.length === 0;
+    exportBtn.disabled = v;
+    importBtn.disabled = v;
+    if (!v && has && !multi && colorPanelOpen) {
+      colorPanel.hidden = false;
+      syncColorPanel(getSel());
+    } else {
+      colorPanel.hidden = true;
+    }
+    repositionFloaters();
+  }
+
+  // The colour panel only opens when the user toggles the colour button; it is
+  // closed by default so selecting a rectangle never auto-opens it.
+  var colorPanelOpen = false;
+
+  var swatchEls = [];
+  (function buildSwatches() {
+    for (var i = 0; i < PALETTE.length; i++) {
+      (function (c) {
+        var b = document.createElement('button');
+        b.className = 'sw';
+        b.type = 'button';
+        b.style.background = c;
+        b.addEventListener('click', function () {
+          var r = getSel();
+          if (!r) return;
+          if (String(r.color).toLowerCase() !== String(c).toLowerCase()) pushHistory(capture());
+          r.color = c;
+          lastColor = c;
+          syncColorPanel(r);
+        });
+        swatchesEl.appendChild(b);
+        swatchEls.push(b);
+      })(PALETTE[i]);
+    }
+  })();
+
+  function syncColorPanel(r) {
+    if (!r) return;
+    for (var i = 0; i < swatchEls.length; i++) {
+      var match = PALETTE[i].toLowerCase() === r.color.toLowerCase();
+      swatchEls[i].classList.toggle('active', match);
+    }
+    var pct = Math.round(r.alpha * 100);
+    alphaRange.value = pct;
+    alphaVal.textContent = pct + '%';
+  }
+
+  colorBtn.addEventListener('click', function () {
+    colorPanelOpen = !colorPanelOpen;
+    if (getSel() && colorPanelOpen) {
+      colorPanel.hidden = false;
+      syncColorPanel(getSel());
+    } else {
+      colorPanel.hidden = true;
+    }
+    repositionFloaters();
+  });
+  alphaRange.addEventListener('input', function () {
+    var r = getSel();
+    if (!r) return;
+    r.alpha = alphaRange.value / 100;
+    alphaVal.textContent = alphaRange.value + '%';
+  });
+  alphaRange.addEventListener('pointerdown', beginGesture);
+  alphaRange.addEventListener('keydown', beginGesture);
+  alphaRange.addEventListener('change', commitGesture);
+
+  // ===== Color wheel (custom color picker) =====
+  // Holds an HSV "hue+sat" disc and a value slider. Selection stores hex in
+  // #wheelHexInput and applies via applyWheel() to the selected shape.
+  function hsvToRgb(h, s, v) {
+    var c = v * s;
+    var hp = ((h % 360) + 360) % 360 / 60;
+    var x = c * (1 - Math.abs((hp % 2) - 1));
+    var m = v - c;
+    var r = 0, g = 0, b = 0;
+    if (hp < 1) { r = c; g = x; }
+    else if (hp < 2) { r = x; g = c; }
+    else if (hp < 3) { g = c; b = x; }
+    else if (hp < 4) { g = x; b = c; }
+    else if (hp < 5) { r = x; b = c; }
+    else { r = c; b = x; }
+    return { r: Math.round((r + m) * 255), g: Math.round((g + m) * 255), b: Math.round((b + m) * 255) };
+  }
+  function rgbToHex(r, g, b) {
+    function hh(x) { var s = x.toString(16); return s.length === 1 ? '0' + s : s; }
+    return '#' + hh(r) + hh(g) + hh(b);
+  }
+  function hexToRgb(hex) {
+    var h = (hex || '').replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    if (h.length < 6) return { r: 0, g: 0, b: 0 };
+    return {
+      r: parseInt(h.substr(0, 2), 16),
+      g: parseInt(h.substr(2, 2), 16),
+      b: parseInt(h.substr(4, 2), 16)
+    };
+  }
+  function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    var h = 0;
+    if (d !== 0) {
+      if (max === r) h = ((g - b) / d) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+      if (h < 0) h += 360;
+    }
+    var s = max === 0 ? 0 : d / max;
+    return { h: h, s: s, v: max };
+  }
+
+  var WHEEL_C = 85, WHEEL_OUT = 82;
+  var wheelH = 220, wheelS = 0.6, wheelV = 1;
+  var wheelCtx = wheelCanvas.getContext('2d');
+  var valCtx = valCanvas.getContext('2d');
+  var wheelBase = null;
+
+  function renderWheelBase() {
+    var size = wheelCanvas.width;
+    var img = wheelCtx.createImageData(size, size);
+    var data = img.data;
+    for (var y = 0; y < size; y++) {
+      for (var x = 0; x < size; x++) {
+        var dx = x - WHEEL_C, dy = y - WHEEL_C;
+        var r = Math.sqrt(dx * dx + dy * dy);
+        var i = (y * size + x) * 4;
+        if (r <= WHEEL_OUT) {
+          var ang = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+          var s = Math.min(1, r / WHEEL_OUT);
+          var c = hsvToRgb(ang, s, 1);
+          data[i] = c.r; data[i + 1] = c.g; data[i + 2] = c.b; data[i + 3] = 255;
+        } else {
+          data[i + 3] = 0;
+        }
+      }
+    }
+    wheelCtx.putImageData(img, 0, 0);
+    wheelBase = wheelCtx.getImageData(0, 0, size, size);
+  }
+
+  function currentColorHex() {
+    var c = hsvToRgb(wheelH, wheelS, wheelV);
+    return rgbToHex(c.r, c.g, c.b);
+  }
+
+  function drawWheel() {
+    var size = wheelCanvas.width;
+    wheelCtx.clearRect(0, 0, size, size);
+    if (wheelBase) wheelCtx.putImageData(wheelBase, 0, 0);
+    wheelCtx.fillStyle = 'rgba(0,0,0,' + (1 - wheelV).toFixed(3) + ')';
+    wheelCtx.beginPath();
+    wheelCtx.arc(WHEEL_C, WHEEL_C, WHEEL_OUT, 0, Math.PI * 2);
+    wheelCtx.fill();
+    var rad = wheelS * WHEEL_OUT;
+    var mx = WHEEL_C + rad * Math.cos(wheelH * Math.PI / 180);
+    var my = WHEEL_C + rad * Math.sin(wheelH * Math.PI / 180);
+    wheelCtx.strokeStyle = '#ffffff';
+    wheelCtx.lineWidth = 2.5;
+    wheelCtx.beginPath();
+    wheelCtx.arc(mx, my, 7, 0, Math.PI * 2);
+    wheelCtx.stroke();
+    wheelCtx.fillStyle = 'rgba(0,0,0,0.45)';
+    wheelCtx.beginPath();
+    wheelCtx.arc(mx, my, 3, 0, Math.PI * 2);
+    wheelCtx.fill();
+  }
+
+  function drawValueBar() {
+    var w = valCanvas.width, h = valCanvas.height;
+    valCtx.clearRect(0, 0, w, h);
+    var c = hsvToRgb(wheelH, wheelS, 1);
+    var g = valCtx.createLinearGradient(0, 0, w, 0);
+    g.addColorStop(0, '#000000');
+    g.addColorStop(1, rgbToHex(c.r, c.g, c.b));
+    valCtx.fillStyle = g;
+    valCtx.fillRect(0, 0, w, h);
+    var mx = Math.max(1, Math.min(w - 1, wheelV * (w - 1)));
+    valCtx.strokeStyle = '#ffffff';
+    valCtx.lineWidth = 2.5;
+    valCtx.beginPath();
+    valCtx.moveTo(mx, 0);
+    valCtx.lineTo(mx, h);
+    valCtx.stroke();
+    valCtx.strokeStyle = 'rgba(0,0,0,0.6)';
+    valCtx.lineWidth = 1;
+    valCtx.beginPath();
+    valCtx.moveTo(mx, 0);
+    valCtx.lineTo(mx, h);
+    valCtx.stroke();
+  }
+
+  function applyWheel() {
+    var r = getSel();
+    if (!r) return;
+    var hex = currentColorHex();
+    r.color = hex;
+    lastColor = hex;
+    wheelPreview.style.background = hex;
+    wheelHexInput.value = hex.toUpperCase();
+    wheelHexInput.classList.remove('invalid');
+    drawWheel();
+    drawValueBar();
+    syncColorPanel(r);
+  }
+
+  function openWheel() {
+    var r = getSel();
+    if (!r) return;
+    beginGesture();
+    var c = hexToRgb(r.color);
+    var hsv = rgbToHsv(c.r, c.g, c.b);
+    wheelH = hsv.h; wheelS = hsv.s; wheelV = hsv.v;
+    if (!wheelBase) renderWheelBase();
+    wheelPreview.style.background = r.color;
+    wheelHexInput.value = r.color.toUpperCase();
+    wheelHexInput.classList.remove('invalid');
+    drawWheel();
+    drawValueBar();
+    wheelOverlay.classList.add('show');
+  }
+  function closeWheel() { wheelOverlay.classList.remove('show'); }
+
+  wheelHexInput.addEventListener('input', function () {
+    var v = wheelHexInput.value.trim().replace(/^#/, '');
+    if (/^[0-9a-fA-F]{3}$/.test(v)) v = v[0] + v[0] + v[1] + v[1] + v[2] + v[2];
+    if (/^[0-9a-fA-F]{6}$/.test(v)) {
+      var rgb = hexToRgb('#' + v);
+      var hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+      wheelH = hsv.h; wheelS = hsv.s; wheelV = hsv.v;
+      applyWheel();
+    } else {
+      wheelHexInput.classList.add('invalid');
+    }
+  });
+  wheelHexInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') wheelDone.click();
+    e.stopPropagation();
+  });
+  wheelHexInput.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+
+  function wheelPos(e) {
+    var rect = wheelCanvas.getBoundingClientRect();
+    var x = e.clientX - rect.left;
+    var y = e.clientY - rect.top;
+    var dx = x - WHEEL_C, dy = y - WHEEL_C;
+    var r = Math.min(Math.sqrt(dx * dx + dy * dy), WHEEL_OUT);
+    var h = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+    var s = r / WHEEL_OUT;
+    return { h: h, s: s };
+  }
+  function valPos(e) {
+    var rect = valCanvas.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  }
+
+  wheelBtn.addEventListener('click', openWheel);
+  wheelDone.addEventListener('click', function () { commitGesture(); closeWheel(); });
+  wheelCancel.addEventListener('click', function () { pendingState = null; closeWheel(); });
+  wheelOverlay.addEventListener('pointerdown', function (e) {
+    if (e.target === wheelOverlay) closeWheel();
+  });
+
+  function wheelDragStart(e) {
+    e.preventDefault();
+    try { wheelCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+    var p = wheelPos(e);
+    wheelH = p.h; wheelS = p.s;
+    applyWheel();
+  }
+  function wheelDragMove(e) {
+    if (e.buttons === 0 && e.pointerType === 'mouse') return;
+    var p = wheelPos(e);
+    wheelH = p.h; wheelS = p.s;
+    applyWheel();
+  }
+  wheelCanvas.addEventListener('pointerdown', wheelDragStart);
+  wheelCanvas.addEventListener('pointermove', wheelDragMove);
+
+  function valDragStart(e) {
+    e.preventDefault();
+    try { valCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+    wheelV = valPos(e);
+    applyWheel();
+  }
+  function valDragMove(e) {
+    if (e.buttons === 0 && e.pointerType === 'mouse') return;
+    wheelV = valPos(e);
+    applyWheel();
+  }
+  valCanvas.addEventListener('pointerdown', valDragStart);
+  valCanvas.addEventListener('pointermove', valDragMove);
+
+  // ===== Rename overlay (shared by shapes and floors) =====
+  // renameFloorIdx == -1 means the shape rename dialog; otherwise the floor
+  // index being renamed. Confirm in okBtn handler routes to the right one.
+  var renameFloorIdx = -1;
+  function openRename(id) {
+    var r = findRect(id);
+    if (!r) return;
+    renameFloorIdx = -1;
+    selId = id;
+    updateToolbar();
+    renameTitle.textContent = 'Rename shape';
+    dupBtn.hidden = true;
+    nameInput.value = r.name || '';
+    overlay.classList.add('show');
+    setTimeout(function () { nameInput.focus(); }, 50);
+  }
+  function openFloorRename(i) {
+    var f = floors[i];
+    if (!f) return;
+    renameFloorIdx = i;
+    selId = null;
+    updateToolbar();
+    renameTitle.textContent = 'Rename floor';
+    dupBtn.hidden = false;
+    nameInput.value = f.name;
+    overlay.classList.add('show');
+    setTimeout(function () { nameInput.focus(); }, 50);
+  }
+  function closeRename() { overlay.classList.remove('show'); }
+
+  // ===== Notes overlay (per-room free text) =====
+  // Notes are only readable/editable through this dialog; they are never
+  // drawn on the map. The id edited is kept in notesPendingId so a stale
+  // selection mid-edit can't write to the wrong shape.
+  var notesPendingId = -1;
+  function openNotes(id) {
+    var r = findRect(id);
+    if (!r) return;
+    notesPendingId = id;
+    notesTitle.textContent = 'Notes - ' + (r.name || 'Room ' + r.id);
+    notesInput.value = r.notes || '';
+    notesOverlay.classList.add('show');
+    setTimeout(function () {
+      notesInput.focus();
+      // Put the caret at the end of the existing notes so typing appends.
+      notesInput.setSelectionRange(notesInput.value.length, notesInput.value.length);
+    }, 50);
+  }
+  function closeNotes() { notesOverlay.classList.remove('show'); notesPendingId = -1; }
+  function saveNotes() {
+    var r = findRect(notesPendingId);
+    if (r) {
+      var v = notesInput.value;
+      if (v !== (r.notes || '')) {
+        pushHistory(capture());
+        r.notes = v;
+      }
+    }
+    closeNotes();
+  }
+  notesBtn.addEventListener('click', function () {
+    var s = getSel();
+    if (s) openNotes(s.id);
+  });
+  notesSave.addEventListener('click', saveNotes);
+  notesCancel.addEventListener('click', closeNotes);
+  notesOverlay.addEventListener('pointerdown', function (e) {
+    if (e.target === notesOverlay) closeNotes();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && notesOverlay.classList.contains('show')) closeNotes();
+  });
+
+  function placeMarker(x, y) {
+    if (!marker) {
+      marker = { x: x, y: y };
+      floors[activeIndex].marker = marker;
+    } else {
+      marker.x = x;
+      marker.y = y;
+    }
+    // Only one marker may exist in the whole map: placing one here removes any
+    // marker sitting on another floor.
+    for (var i = 0; i < floors.length; i++) {
+      if (i !== activeIndex && floors[i].marker) floors[i].marker = null;
+    }
+  }
+  // Removes the marker from the active floor (undoable, own history entry; the
+  // in-flight gesture is dropped so pointerup does not push a second one).
+  function deleteMarker() {
+    if (!marker) return;
+    pushHistory(capture());
+    marker = null;
+    floors[activeIndex].marker = null;
+    pendingState = null;
+    mode = null;
+    drag = null;
+    updateToolbar();
+    hintFlash('Marker removed');
+  }
+  // ===== Pointer handlers (canvas down, window move/up) =====
+  function onDown(e) {
+    e.preventDefault();
+    cancelViewAnim();
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    var p = { x: e.clientX, y: e.clientY, moved: false, t: performance.now() };
+    pointers.set(e.pointerId, p);
+    if (pointers.size === 2) { startPinch(); return; }
+    if (pointers.size > 2) return;
+    if (markerMode) {
+      var mw = s2w(p.x, p.y);
+      var onMarker = false;
+      if (marker) {
+        var mp = w2s(marker.x, marker.y);
+        onMarker = Math.hypot(p.x - mp.x, p.y - mp.y) <= 24;
+      }
+      beginGesture();
+      if (onMarker) {
+        // Pressing the marker arms a 500ms delete: holding still removes it,
+        // dragging moves it (onMove cancels the timer on movement >8px).
+        if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+        lpTimer = setTimeout(function () {
+          lpTimer = null;
+          if (pointers.has(e.pointerId) && marker) deleteMarker();
+        }, 500);
+      } else {
+        placeMarker(mw.x, mw.y);
+      }
+      drag = { mx: 0, my: 0 };
+      mode = 'marker';
+      return;
+    }
+    if (viewMode) { mode = 'pan'; startPan(p.x, p.y); return; }
+    if (selectMode) {
+      // Selection changes happen on TAP (release). Pressing here only arms a
+      // 500ms long-press: a quick drag cancels it and pans instead, while
+      // holding still arms the group-move (over a shape) or box-select (over
+      // empty space).
+      var swp = s2w(p.x, p.y);
+      var sts = topShape(swp.x, swp.y);
+      movePending = { id: e.pointerId, sx: p.x, sy: p.y, stsId: sts ? sts.id : null };
+      if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+      lpTimer = setTimeout(function () {
+        lpTimer = null;
+        if (!movePending || movePending.id !== e.pointerId || !pointers.has(e.pointerId)) return;
+        var cur = pointers.get(e.pointerId);
+        if (movePending.stsId !== null) {
+          beginGesture();
+          mode = 'movegroup';
+          startMoveGroup(cur.x, cur.y);
+        } else {
+          marquee = { sx: cur.x, sy: cur.y, cx: cur.x, cy: cur.y, active: false };
+          mode = 'marquee';
+        }
+        movePending = null;
+      }, 500);
+      return;
+    }
+    if (editMode) {
+      var eh = editHitTest(p.x, p.y);
+      if (eh.type === 'vtx') {
+        beginGesture();
+        selId = eh.rect.id;
+        selVtx = eh.i;
+        mode = 'vtx';
+        drag = { rect: eh.rect, i: eh.i };
+        lpTimer = setTimeout(function () { removeVtxNow(eh.rect, eh.i); }, 500);
+      } else if (eh.type === 'edge') {
+        beginGesture();
+        ensurePts(eh.rect);
+        selId = eh.rect.id;
+        var ni = addVtx(eh.rect, eh.i);
+        if (ni >= 0) {
+          selVtx = ni;
+          mode = 'vtx';
+          drag = { rect: eh.rect, i: ni };
+        } else {
+          mode = 'pan'; startPan(p.x, p.y);
+        }
+      } else if (eh.type === 'move') {
+        beginGesture();
+        selId = eh.rect.id;
+        selVtx = -1;
+        updateToolbar();
+        mode = 'move';
+        startMove(eh.rect, p.x, p.y);
+      } else {
+        selVtx = -1;
+        if (selId !== null) { selId = null; updateToolbar(); }
+        mode = 'pan'; startPan(p.x, p.y);
+      }
+      return;
+    }
+    // Default mode: a stationary 500ms hold on EMPTY space deletes the
+    // rectangle under the crosshair (undoable). Moving a shape also needs the
+    // same hold-then-drag as Move mode - a quick drag over a shape pans the
+    // view instead of nudging it. Resize/rotate handles act immediately (they
+    // are deliberate, small targets). Movement >8px or an early release
+    // cancels the timers (see onMove / endPointer).
+    var h = hitTest(p.x, p.y);
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    if (h.type === 'pan' && crosshairEnabled) {
+      lpTimer = setTimeout(function () {
+        lpTimer = null;
+        if (pointers.has(e.pointerId)) deleteAtCrosshair(p.x, p.y);
+      }, 500);
+    }
+    if (h.type === 'dup') {
+      beginGesture();
+      duplicateSelected();
+      commitGesture();
+      return;
+    }
+    if (h.type === 'rotate') {
+      beginGesture(); selId = h.rect.id; updateToolbar(); mode = 'rotate'; startRotate(h.rect, p.x, p.y);
+    } else if (h.type === 'resize') {
+      beginGesture(); selId = h.rect.id; updateToolbar(); mode = 'resize'; startResize(h.rect, h.corner);
+    } else if (h.type === 'movehand') {
+      // Move handle: deliberate grab, so move immediately (no long-press).
+      beginGesture(); selId = h.rect.id; selVtx = -1; updateToolbar(); mode = 'move'; startMove(h.rect, p.x, p.y);
+    } else if (h.type === 'move') {
+      // Arm the move: on a 500ms hold select the shape and start dragging from
+      // the pointer's current position (no jump); a quick drag pans, and a tap
+      // on release still selects the shape via handleTap().
+      movePending = { id: e.pointerId, sx: p.x, sy: p.y, stsId: h.rect.id, def: true };
+      lpTimer = setTimeout(function () {
+        lpTimer = null;
+        if (!movePending || movePending.id !== e.pointerId || !pointers.has(e.pointerId)) return;
+        var cur = pointers.get(e.pointerId);
+        beginGesture();
+        selId = h.rect.id;
+        selVtx = -1;
+        updateToolbar();
+        mode = 'move';
+        startMove(h.rect, cur.x, cur.y);
+        movePending = null;
+      }, 500);
+    } else {
+      if (selId !== null) { selId = null; updateToolbar(); }
+      mode = 'pan'; startPan(p.x, p.y);
+    }
+  }
+  function onMove(e) {
+    var p = pointers.get(e.pointerId);
+    if (!p) return;
+    if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) {
+      p.moved = true;
+      if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    }
+    p.x = e.clientX; p.y = e.clientY;
+    if (pointers.size >= 2) {
+      if (mode !== 'pinch') startPinch();
+      doPinch();
+      return;
+    }
+    // Move mode: dragging away from the press point before the long-press
+    // fires pans the view (cumulative distance, so slow drags also count).
+    if (mode === null && movePending && movePending.id === e.pointerId) {
+      var mdx = e.clientX - movePending.sx, mdy = e.clientY - movePending.sy;
+      if (Math.hypot(mdx, mdy) > 8) {
+        if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+        movePending = null;
+        mode = 'pan';
+        startPan(p.x, p.y);
+      }
+    }
+    if (mode === 'pan') doPan(p.x, p.y);
+    else if (mode === 'move' && drag) doMove(p.x, p.y);
+    else if (mode === 'movegroup' && drag) doMoveGroup(p.x, p.y);
+    else if (mode === 'resize' && drag) { var wp = s2w(p.x, p.y); doResize(wp.x, wp.y); }
+    else if (mode === 'rotate' && drag) doRotate(p.x, p.y);
+    else if (mode === 'marker' && drag) doMarker(p.x, p.y);
+    else if (mode === 'vtx' && drag) doVtx(p.x, p.y);
+    else if (mode === 'marquee' && marquee) {
+      marquee.cx = p.x;
+      marquee.cy = p.y;
+      if (Math.hypot(p.x - marquee.sx, p.y - marquee.sy) > 8) marquee.active = true;
+    }
+  }
+  function endPointer(e) {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    var p = pointers.get(e.pointerId);
+    // A tap is a release with no movement, <500ms duration. In Move mode the
+    // long-press didn't fire and no pan started (movePending still alive), so
+    // the press resolves as a selection toggle: tap a shape to pick/drop it,
+    // tap empty space to clear. Other modes handle taps on pointerdown, so
+    // handleTap only runs in the default mode.
+    if (p && !p.moved && (performance.now() - p.t) < 500) {
+      if (selectMode) {
+        if (movePending && movePending.id === e.pointerId) {
+          if (movePending.stsId !== null) toggleSelect(movePending.stsId);
+          else clearSelection();
+          movePending = null;
+          updateToolbar();
+        }
+      } else if (!markerMode && !viewMode && !editMode) {
+        handleTap(p);
+      }
+    }
+    if (movePending && movePending.id === e.pointerId) movePending = null;
+    pointers.delete(e.pointerId);
+    // Select-mode box select finishes when the last finger lifts.
+    if (pointers.size === 0 && mode === 'marquee') {
+      finalizeMarquee();
+      mode = null;
+      drag = null;
+      pinch = null;
+      return;
+    }
+    // Last pointer up: finalize the gesture's undo entry (if state changed).
+    if (pointers.size === 0) { commitGesture(); mode = null; drag = null; pinch = null; }
+    else if (pointers.size === 1) {
+      var rem = Array.from(pointers.values())[0];
+      if (markerMode) {
+        var mw = s2w(rem.x, rem.y);
+        placeMarker(mw.x, mw.y);
+        drag = { mx: 0, my: 0 };
+        mode = 'marker';
+      } else {
+        mode = 'pan'; drag = null; startPan(rem.x, rem.y);
+      }
+    }
+  }
+  function doMarker(sx, sy) {
+    if (!marker) return;
+    var wp = s2w(sx, sy);
+    placeMarker(wp.x, wp.y);
+  }
+  // End of a Select-mode box drag: replace the selection with every shape that
+  // overlaps the dragged rect. A tap on empty space (no drag) clears the
+  // selection instead.
+  function finalizeMarquee() {
+    if (!marquee) return;
+    clearSelection();
+    if (marquee.active) {
+      var wA = s2w(marquee.sx, marquee.sy);
+      var wB = s2w(marquee.cx, marquee.cy);
+      var wr = {
+        minX: Math.min(wA.x, wB.x), minY: Math.min(wA.y, wB.y),
+        maxX: Math.max(wA.x, wB.x), maxY: Math.max(wA.y, wB.y)
+      };
+      for (var i = 0; i < rects.length; i++) {
+        if (shapeIntersectsWorldRect(rects[i], wr)) selIds.push(rects[i].id);
+      }
+      // selId is the primary; extras go in selIds (never duplicated across both).
+      if (selIds.length > 0) selId = selIds.shift();
+    }
+    marquee = null;
+    updateToolbar();
+  }
+  // Edit-mode: drag a vertex (mode 'vtx'). The gesture remembers the dragged
+  // vertex index; each move re-writes its LOCAL coords from the pointer.
+  function doVtx(sx, sy) {
+    var r = drag.rect;
+    var pts = ensurePts(r);
+    var wp = s2w(sx, sy);
+    var l = worldToLocal(r, wp.x, wp.y);
+    pts[drag.i].x = l.x;
+    pts[drag.i].y = l.y;
+  }
+  function removeVtxNow(r, i) {
+    lpTimer = null;
+    if (mode !== 'vtx') return;
+    ensurePts(r);
+    if (r.pts.length > 3) pushHistory(capture());
+    removeVtx(r, i);
+    selVtx = -1;
+    mode = null;
+    drag = null;
+    pendingState = null;
+  }
+  // Topmost shape whose area contains the crosshair (screen centre), if any.
+  function rectAtCrosshair() {
+    var wp = s2w(W / 2, H / 2 - 20);
+    return topShape(wp.x, wp.y);
+  }
+  // Add a new rectangle at the crosshair. The Add button (openRenameBox=true)
+  // jumps straight into the rename dialog; the double-tap gesture passes false
+  // so the shape is added silently and left selected.
+  function addRectAtCrosshair(openRenameBox) {
+    pushHistory(capture());
+    var w = s2w(W / 2, H / 2 - 20);
+    var r = makeRect(w.x, w.y);
+    selId = r.id;
+    updateToolbar();
+    if (openRenameBox) openRename(r.id);
+  }
+  // Delete the rectangle currently under the crosshair (undoable). sx/sy is the
+  // press point so a drag started over a shape is switched back to a pan.
+  function deleteAtCrosshair(sx, sy) {
+    var r = rectAtCrosshair();
+    if (!r) { hintFlash('No rectangle at the crosshair'); return; }
+    var idx = rects.indexOf(r);
+    if (idx < 0) return;
+    pushHistory(capture());
+    rects.splice(idx, 1);
+    if (selId === r.id) { selId = null; selVtx = -1; }
+    if (selIds.indexOf(r.id) >= 0) {
+      var si = selIds.indexOf(r.id);
+      selIds.splice(si, 1);
+      if (selId === null && selIds.length > 0) selId = selIds[0];
+    }
+    // The delete is its own history entry; drop any in-flight gesture so the
+    // final pointerup does not push a second one.
+    pendingState = null;
+    if (mode === 'move' || mode === 'resize' || mode === 'rotate') {
+      mode = 'pan';
+      drag = null;
+      startPan(sx, sy);
+    }
+    updateToolbar();
+    hintFlash('Rectangle deleted');
+  }
+  // Quick tap (no movement, <500ms, not in a mode): select the topmost shape.
+  // Two taps on the same shape within 350ms / 40px = rename it.
+  // Two taps on empty space = silently add a new rectangle at the crosshair.
+  function handleTap(p) {
+    var wp = s2w(p.x, p.y);
+    var list = shapesAt(wp.x, wp.y);
+    var rid = list.length ? list[0].id : null;
+    var now = performance.now();
+    // Double-tap rename only makes sense when a single shape is under the tap;
+    // overlapping shapes cycle through instead (see the selection below).
+    if (list.length < 2 && rid !== null && lastTap.rectId === rid && (now - lastTap.t) < 350 &&
+        Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 40) {
+      lastTap.t = 0;
+      openRename(rid);
+      return;
+    }
+    if (crosshairEnabled && rid === null && lastTap.rectId === null && (now - lastTap.t) < 350 &&
+        Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 40) {
+      lastTap.t = 0;
+      addRectAtCrosshair(false);
+      return;
+    }
+    if (rid !== null) {
+      // Cycling: when several shapes overlap under the tap and the currently
+      // selected shape is one of them, step to the NEXT one below it, so
+      // repeated taps on the same spot walk through every overlapped shape
+      // (wrapping back to the top).
+      if (list.length >= 2) {
+        var cur = getSel();
+        var idx = cur ? list.indexOf(cur) : -1;
+        if (idx >= 0) selId = list[(idx + 1) % list.length].id;
+        else selId = rid;
+      } else {
+        selId = rid;
+      }
+    } else {
+      selId = null;
+    }
+    selIds.length = 0;
+    selVtx = -1;
+    updateToolbar();
+    lastTap = { t: now, x: p.x, y: p.y, rectId: rid };
+  }
+
+  canvas.addEventListener('pointerdown', onDown);
+  canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', endPointer);
+  window.addEventListener('pointercancel', endPointer);
+
+  addBtn.addEventListener('click', function () { addRectAtCrosshair(true); });
+  markerBtn.addEventListener('click', function () {
+    markerMode = !markerMode;
+    markerBtn.classList.toggle('mode-on', markerMode);
+    if (markerMode) {
+      if (editMode) { editMode = false; editBtn.classList.remove('mode-on'); selVtx = -1; }
+      if (selectMode) { selectMode = false; selectBtn.classList.remove('mode-on'); }
+      clearSelection();
+      updateToolbar();
+    }
+    updateHintText();
+  });
+  editBtn.addEventListener('click', function () {
+    editMode = !editMode;
+    editBtn.classList.toggle('mode-on', editMode);
+    selVtx = -1;
+    if (editMode) {
+      if (markerMode) { markerMode = false; markerBtn.classList.remove('mode-on'); }
+      if (selectMode) { selectMode = false; selectBtn.classList.remove('mode-on'); }
+      selIds.length = 0;
+    }
+    updateHintText();
+    updateToolbar();
+  });
+  selectBtn.addEventListener('click', function () {
+    selectMode = !selectMode;
+    selectBtn.classList.toggle('mode-on', selectMode);
+    if (selectMode) {
+      if (markerMode) { markerMode = false; markerBtn.classList.remove('mode-on'); }
+      if (editMode) { editMode = false; editBtn.classList.remove('mode-on'); selVtx = -1; }
+    } else {
+      selIds.length = 0;
+    }
+    updateHintText();
+    updateToolbar();
+  });
+  renameBtn.addEventListener('click', function () { openRename(selId); });
+  searchBtn.addEventListener('click', function () {
+    searchMode = !searchMode;
+    searchBtn.classList.toggle('mode-on', searchMode);
+    if (searchMode) {
+      searchBar.hidden = false;
+      searchInput.value = '';
+      searchMatches.length = 0;
+      hint.classList.remove('err');
+      updateHintText();
+      setTimeout(function () { searchInput.focus(); }, 50);
+    } else {
+      searchBar.hidden = true;
+      searchInput.value = '';
+      searchMatches.length = 0;
+      hint.classList.remove('err');
+      updateHintText();
+    }
+  });
+  searchInput.addEventListener('input', runSearch);
+  searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') searchBtn.click();
+  });
+  searchClose.addEventListener('click', function () { searchBtn.click(); });
+  function setViewMode(on) {
+    viewMode = on;
+    viewBtn.classList.toggle('mode-on', on);
+    viewBtnZoom.classList.toggle('mode-on', !on);
+    if (on) {
+      clearSelection();
+      if (selectMode) {
+        selectMode = false;
+        selectBtn.classList.remove('mode-on');
+      }
+      if (editMode) {
+        editMode = false;
+        editBtn.classList.remove('mode-on');
+      }
+      colorPanel.hidden = true;
+      closeWheel();
+      closeRename();
+      closeNotes();
+    }
+    updateHintText();
+    updateToolbar();
+  }
+  viewBtn.addEventListener('click', function () {
+    setViewMode(!viewMode);
+  });
+  viewBtnZoom.addEventListener('click', function () {
+    setViewMode(!viewMode);
+  });
+  delBtn.addEventListener('click', function () {
+    if (selId === null && selIds.length === 0) return;
+    pushHistory(capture());
+    var ids = {};
+    if (selId !== null) ids[selId] = true;
+    for (var k = 0; k < selIds.length; k++) ids[selIds[k]] = true;
+    for (var i = rects.length - 1; i >= 0; i--) {
+      if (ids[rects[i].id]) rects.splice(i, 1);
+    }
+    clearSelection();
+    updateToolbar();
+  });
+  exportBtn.addEventListener('click', function () {
+    var data = {
+      version: 2,
+      view: { x: view.x, y: view.y, scale: view.scale, rot: view.rot },
+      activeFloor: activeIndex,
+      floors: floors.map(function (f) {
+        return {
+          name: f.name,
+          view: f.view || null,
+          marker: f.marker ? { x: f.marker.x, y: f.marker.y } : null,
+          rects: f.rects.map(function (r) {
+            return {
+              name: r.name, cx: r.cx, cy: r.cy,
+              w: r.w, h: r.h, rot: r.rot,
+              color: r.color, alpha: r.alpha, notes: r.notes || '',
+              pts: r.pts ? r.pts.map(function (p) { return { x: p.x, y: p.y }; }) : null
+            };
+          })
+        };
+      })
+    };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'mapper-export.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    hintFlash('Exported ' + floors.length + ' floor(s)');
+  });
+  importBtn.addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files && fileInput.files[0]) importFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
+  function importFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        if (!data || !(Array.isArray(data.floors) || Array.isArray(data.rects))) {
+          throw new Error('not a valid mapper file');
+        }
+        var sanitize = function (r) {
+          return {
+            id: 0,
+            name: String(r.name == null ? '' : r.name),
+            notes: String(r.notes == null ? '' : r.notes),
+            cx: Number(r.cx) || 0,
+            cy: Number(r.cy) || 0,
+            w: Math.max(MIN_W, Number(r.w) || MIN_W),
+            h: Math.max(MIN_H, Number(r.h) || MIN_H),
+            rot: Number(r.rot) || 0,
+            color: /^#[0-9a-fA-F]{3,8}$/.test(r.color || '') ? r.color : DEFAULT_FILL,
+            alpha: typeof r.alpha === 'number' ? Math.max(0, Math.min(1, r.alpha)) : DEFAULT_ALPHA,
+            pts: (Array.isArray(r.pts) && r.pts.length >= 3)
+              ? r.pts.map(function (p) { return { x: Number(p.x) || 0, y: Number(p.y) || 0 }; })
+              : null
+          };
+        };
+        var imported;
+        if (Array.isArray(data.floors)) {
+          imported = data.floors.map(function (f) {
+            return {
+              name: String(f.name == null ? 'Floor' : f.name),
+              view: (f.view && typeof f.view.x === 'number' && typeof f.view.y === 'number' && typeof f.view.scale === 'number')
+                ? { x: f.view.x, y: f.view.y, scale: Math.max(0.05, Math.min(10, f.view.scale)), rot: Number(f.view.rot) || 0 } : null,
+              marker: (f.marker && typeof f.marker.x === 'number' && typeof f.marker.y === 'number')
+                ? { x: f.marker.x, y: f.marker.y } : null,
+              rects: (Array.isArray(f.rects) ? f.rects : []).map(sanitize),
+              nextId: 1
+            };
+          });
+        } else {
+          imported = [{
+            name: 'Ground',
+            marker: (data.marker && typeof data.marker.x === 'number' && typeof data.marker.y === 'number')
+              ? { x: data.marker.x, y: data.marker.y } : null,
+            rects: data.rects.map(sanitize),
+            nextId: 1
+          }];
+        }
+        if (imported.length === 0) {
+          imported = [{ name: 'Ground', rects: [], marker: null, nextId: 1 }];
+        }
+        imported.forEach(function (f) {
+          f.rects.forEach(function (r) { r.id = f.nextId++; });
+        });
+        pushHistory(capture());
+        floors = imported;
+        activeIndex = (typeof data.activeFloor === 'number' && data.activeFloor >= 0 && data.activeFloor < floors.length)
+          ? data.activeFloor : 0;
+        if (data.view && typeof data.view.x === 'number' && typeof data.view.scale === 'number') {
+          view.x = data.view.x;
+          view.y = data.view.y;
+          view.scale = Math.max(0.05, Math.min(10, data.view.scale));
+          view.rot = Number(data.view.rot) || 0;
+        }
+        syncActiveFloor();
+        restoreFloorView(activeIndex);
+        renderFloorTabs();
+        updateToolbar();
+        setViewMode(true);
+        hintFlash('Imported ' + floors.length + ' floor(s)');
+      } catch (err) {
+        hintFlash('Import failed');
+      }
+    };
+    reader.readAsText(file);
+  }
+  okBtn.addEventListener('click', function () {
+    var v = nameInput.value.trim();
+    if (renameFloorIdx >= 0) {
+      var f = floors[renameFloorIdx];
+      if (f && v && v !== f.name) {
+        pushHistory(capture());
+        f.name = v;
+        renderFloorTabs();
+      }
+    } else {
+      var r = findRect(selId);
+      if (r) {
+        if (v !== r.name) pushHistory(capture());
+        r.name = v === '' ? '' : v;
+      }
+    }
+    closeRename();
+  });
+  cancelBtn.addEventListener('click', closeRename);
+  dupBtn.addEventListener('click', function () {
+    if (renameFloorIdx >= 0) {
+      duplicateFloor(renameFloorIdx);
+      closeRename();
+    }
+  });
+  nameInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') okBtn.click();
+    if (e.key === 'Escape') closeRename();
+  });
+  overlay.addEventListener('pointerdown', function (e) {
+    if (e.target === overlay) closeRename();
+  });
+
+  // ===== Camera animation (home, import fit) =====
+  // Each call sets a new viewAnim; a stale frame exits early via the t0 check.
+  var viewAnim = null;
+  function cancelViewAnim() { viewAnim = null; }
+  function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function animateView(tx, ty, ts, tr, dur) {
+    cancelViewAnim();
+    var start = { x: view.x, y: view.y, scale: view.scale, rot: view.rot };
+    var t0 = performance.now();
+    viewAnim = { t0: t0, start: start, target: { x: tx, y: ty, scale: ts, rot: tr }, dur: dur };
+    function frame(now) {
+      var a = viewAnim;
+      if (!a || a.t0 !== t0) return;
+      var p = Math.min(1, (now - t0) / a.dur);
+      var e = easeInOutCubic(p);
+      view.scale = start.scale + (ts - start.scale) * e;
+      view.x = start.x + (tx - start.x) * e;
+      view.y = start.y + (ty - start.y) * e;
+      view.rot = start.rot + (tr - start.rot) * e;
+      if (p < 1) requestAnimationFrame(frame);
+      else viewAnim = null;
+    }
+    requestAnimationFrame(frame);
+  }
+  function animateToOrigin() {
+    animateView(-W / 2, -H / 2, 1, 0, 750);
+  }
+  document.getElementById('home').addEventListener('click', function () {
+    animateToOrigin();
+  });
+  // Rotate the VIEW by 90 degrees clockwise (dir=1) or anticlockwise (dir=-1)
+  // around the crosshair: the world point currently under the crosshair stays
+  // pinned to the screen centre while the rest of the map turns. Only the
+  // camera turns; shapes/rooms are untouched. The camera is not part of undo
+  // history, so this never creates or consumes undo/redo entries.
+  // The turn is animated: x/y are recomputed every frame from the easing rot
+  // so the crosshair anchor is pinned at every instant (not just the end).
+  function rotateView(dir) {
+    cancelViewAnim();
+    var anchor = s2w(W / 2, H / 2 - 20);
+    var startRot = view.rot;
+    var targetRot = ((startRot + dir * 90) % 360 + 360) % 360;
+    var scale = view.scale;
+    var t0 = performance.now();
+    var dur = 420;
+    viewAnim = { t0: t0, anchor: anchor, startRot: startRot, targetRot: targetRot, delta: dir * 90, scale: scale, dur: dur };
+    function frame(now) {
+      var a = viewAnim;
+      if (!a || a.t0 !== t0) return;
+      var p = Math.min(1, (now - t0) / a.dur);
+      var e = easeInOutCubic(p);
+      view.rot = (((a.startRot + a.delta * e) % 360) + 360) % 360;
+      var rad = viewRot(), c = Math.cos(rad), s = Math.sin(rad);
+      var u = (W / 2) / a.scale, v = (H / 2 - 20) / a.scale;
+      view.x = a.anchor.x - (u * c + v * s);
+      view.y = a.anchor.y - (-u * s + v * c);
+      if (p < 1) requestAnimationFrame(frame);
+      else viewAnim = null;
+    }
+    requestAnimationFrame(frame);
+  }
+  // ===== View rotation lever =====
+  // The vertical slider replaces the old rotate buttons. Its knob is centred
+  // by default; dragging it down past the threshold rotates the view 90°
+  // clockwise, up rotates 90° anti-clockwise (via the animated rotateView).
+  // On release the knob springs back to the middle, lever-style.
+  var rotKnob = document.getElementById('rotKnob');
+  var ROT_MAX = 28;   // knob travel from centre in px (matches .rot-track length)
+  var ROT_STEP = 14;  // minimum drag to trigger a 90° step
+  var rotDrag = null;
+  rotKnob.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    try { rotKnob.setPointerCapture(e.pointerId); } catch (err) {}
+    rotKnob.classList.remove('spring');
+    rotKnob.classList.add('dragging');
+    rotDrag = { id: e.pointerId, sy: e.clientY, dy: 0 };
+  });
+  window.addEventListener('pointermove', function (e) {
+    if (!rotDrag || rotDrag.id !== e.pointerId) return;
+    var d = e.clientY - rotDrag.sy;
+    rotDrag.dy = Math.max(-ROT_MAX, Math.min(ROT_MAX, d));
+    rotKnob.style.transform = 'translateY(' + rotDrag.dy + 'px)';
+  });
+  function rotRelease(e) {
+    if (!rotDrag || rotDrag.id !== e.pointerId) return;
+    var dy = rotDrag.dy;
+    rotDrag = null;
+    rotKnob.classList.remove('dragging');
+    rotKnob.classList.add('spring');
+    rotKnob.style.transform = 'translateY(0px)';
+    if (dy <= -ROT_STEP) rotateView(1);    // up → clockwise
+    else if (dy >= ROT_STEP) rotateView(-1); // down → anti-clockwise
+    setTimeout(function () { rotKnob.classList.remove('spring'); }, 300);
+  }
+  window.addEventListener('pointerup', rotRelease);
+  window.addEventListener('pointercancel', rotRelease);
+  document.getElementById('crosshairBtn').addEventListener('click', function () {
+    crosshairEnabled = !crosshairEnabled;
+    this.classList.toggle('mode-on', crosshairEnabled);
+    updateHintText();
+  });
+  document.getElementById('toolbarToggle').addEventListener('click', function () {
+    toolbar.hidden = !toolbar.hidden;
+    toolbarToggle.innerHTML = toolbar.hidden ? EYE_CLOSED : EYE_OPEN;
+    repositionFloaters();
+  });
+  undoBtn.addEventListener('click', undo);
+  redoBtn.addEventListener('click', redo);
+
+  // ===== Init =====
+  document.getElementById('crosshairBtn').classList.add('mode-on');
+  viewBtnZoom.classList.add('mode-on');
+  renderFloorTabs();
+  updateToolbar();
+  updateHintText();
+})();
+</script>
+</body>
+</html>
