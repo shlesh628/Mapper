@@ -104,7 +104,8 @@
   .ftab {
     height: 36px; padding: 0 30px 0 14px; border: 0; border-radius: 999px;
     background: var(--chip-bg); color: var(--muted);
-    font-size: 13px; font-weight: 600; box-shadow: 0 2px 6px var(--shadow);
+    font-size: 13px; font-weight: 600;
+    box-shadow: 0 2px 6px var(--shadow);
     white-space: nowrap;
     touch-action: manipulation; user-select: none; -webkit-user-select: none;
     -webkit-touch-callout: none;
@@ -130,6 +131,7 @@
     position: fixed; left: 12px; top: calc(12px + env(safe-area-inset-top)); z-index: 10;
   }
   .theme button {
+    position: relative;
     width: 46px; height: 46px; border-radius: 12px; border: 0;
     background: var(--panel-bg); color: var(--text); font-size: 20px; font-weight: 600;
     box-shadow: 0 2px 6px rgba(0,0,0,.35);
@@ -544,10 +546,10 @@
    *              start on a shape are for dragging and never delete.
    *  - The crosshair and its gestures can be switched off entirely with the
    *    #crosshairBtn toggle (top-right, under the origin/home button).
-   *  - Search (#searchBtn) opens a fuzzy-search bar: matching shapes are
-   *    outlined in orange with a pulsing sonar ripple. If the best match lives
-   *    on another floor, the view jumps there automatically; no match anywhere
-   *    flashes a red "Not found" hint.
+   *  - Search (#searchBtn) opens a search bar (case-insensitive substring):
+   *    matching shapes are outlined in orange with a pulsing sonar ripple. If
+   *    the best match lives on another floor, the view jumps there
+   *    automatically; no match anywhere flashes a red "Not found" hint.
    *  - View    : pan/zoom only; all edit controls are disabled.
    *  - Marker  : tap/drag places or moves the floor marker.
    *  - Edit    : selected shape shows its real vertices + edge midpoints.
@@ -758,31 +760,21 @@
     hint._flashT = setTimeout(function () { hint.textContent = hintText(); }, 2200);
   }
 
-  // ===== Fuzzy search (toggle + live highlight) =====
-  // Scores a fuzzy subsequence match of `q` inside `s`: characters must appear
-  // in order; consecutive runs and word-start hits score higher. Returns 0 if
-  // the query can't be formed from the string at all.
-  function fuzzyScore(q, s) {
+  // ===== Case-insensitive substring search (toggle + live highlight) =====
+  // The query must appear as a contiguous substring of the name or notes
+  // (non-fuzzy), case-insensitively. Matches that start earlier in the string
+  // score higher so the "best" pick used for cross-floor jumps stays sensible.
+  function searchScore(q, s) {
     if (!q) return 0;
     q = q.toLowerCase();
     s = (s || '').toLowerCase();
-    var score = 0, qi = 0, prev = -2;
-    for (var i = 0; i < s.length && qi < q.length; i++) {
-      if (s.charAt(i) === q.charAt(qi)) {
-        var cur = 1;
-        if (prev === i - 1) cur += 8;
-        if (i === 0 || s.charAt(i - 1) === ' ' || s.charAt(i - 1) === '-' || s.charAt(i - 1) === '_') cur += 6;
-        score += cur;
-        prev = i;
-        qi++;
-      }
-    }
-    return qi === q.length ? score : 0;
+    var i = s.indexOf(q);
+    return i >= 0 ? (s.length - i) : 0;
   }
-  // Search every floor for shapes whose name OR notes fuzzily match the query.
-  // Every match on every floor is kept so highlights follow you across floor
-  // tabs; the view only jumps to another floor when the CURRENT floor has no
-  // match. On a miss, flash a red "Not found" hint.
+  // Search every floor for shapes whose name OR notes contain the query
+  // (case-insensitive substring). Every match on every floor is kept so
+  // highlights follow you across floor tabs; the view only jumps to another
+  // floor when the CURRENT floor has no match. On a miss, flash a red hint.
   function runSearch() {
     var q = searchInput.value.trim();
     if (!q) {
@@ -796,8 +788,8 @@
       byFloor.push([]);
       var fr = floors[fi].rects;
       for (var i = 0; i < fr.length; i++) {
-        var sn = fuzzyScore(q, fr[i].notes);
-        var sc = Math.max(fuzzyScore(q, fr[i].name), sn);
+        var sn = searchScore(q, fr[i].notes);
+        var sc = Math.max(searchScore(q, fr[i].name), sn);
         if (sc > 0) {
           byFloor[fi].push({ fi: fi, id: fr[i].id, notes: sn > 0 });
           total++;
@@ -2700,6 +2692,9 @@
     if (e.key === 'Escape' && notesOverlay.classList.contains('show')) closeNotes();
   });
 
+  // One marker may exist in the whole map: placing one on any floor removes a
+  // marker sitting on any other floor. Only the ACTIVE floor's marker is ever
+  // drawn (the `marker` alias points at the active floor via syncActiveFloor).
   function placeMarker(x, y) {
     if (!marker) {
       marker = { x: x, y: y };
@@ -2708,8 +2703,6 @@
       marker.x = x;
       marker.y = y;
     }
-    // Only one marker may exist in the whole map: placing one here removes any
-    // marker sitting on another floor.
     for (var i = 0; i < floors.length; i++) {
       if (i !== activeIndex && floors[i].marker) floors[i].marker = null;
     }
