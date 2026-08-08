@@ -328,7 +328,7 @@
 </head>
 <body>
 <canvas id="cv"></canvas>
-<div class="hint" id="hint">Drag to pan - tap a shape - double-tap adds - hold deletes - pinch to zoom</div>
+<div class="hint" id="hint">Drag to pan - tap a shape - double-tap adds - pinch to zoom</div>
 <div class="theme">
   <button id="themeBtn" aria-label="Toggle theme" type="button">&#x263E;</button>
 </div>
@@ -726,7 +726,7 @@
 
   // ===== Context-sensitive hint line (top-centre) =====
   // Any shown hint fades out 5s after it appears (hintShow schedules the hide).
-  var DEFAULT_HINT = 'Drag to pan - tap a shape - hold then drag to move - double-tap adds - hold deletes - pinch to zoom';
+  var DEFAULT_HINT = 'Drag to pan - tap a shape - hold then drag to move - double-tap adds - pinch to zoom';
   function hintText() {
     if (viewMode) return markerMode ? 'View mode: pan/zoom, tap to place or drag to move the marker' : 'View mode: pan and zoom only';
     if (markerMode) return 'Marker mode: tap to place, drag to move';
@@ -889,7 +889,7 @@
   var selectMode = false;
   var selIds = [];
   // Master switch for the crosshair: hides it AND disables its gestures
-  // (double-tap-to-add and long-press-to-delete). Toggled by #crosshairBtn.
+  // (double-tap-to-add). Toggled by #crosshairBtn.
   var crosshairEnabled = true;
   // Fuzzy search mode: searchMatches holds {fi, id} pairs of every shape that
   // matched the current query on the active floor (drawn as rippling rings).
@@ -2827,12 +2827,6 @@
     // cancels the timers (see onMove / endPointer).
     var h = hitTest(p.x, p.y);
     if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
-    if (h.type === 'pan' && crosshairEnabled) {
-      lpTimer = setTimeout(function () {
-        lpTimer = null;
-        if (pointers.has(e.pointerId)) deleteAtCrosshair(p.x, p.y);
-      }, 500);
-    }
     if (h.type === 'dup') {
       beginGesture();
       duplicateSelected();
@@ -3020,11 +3014,6 @@
     }
     vtxTap = (hit.type === 'vtx' && hit.rect.id === r.id) ? { id: r.id, i: hit.i, t: now } : null;
   }
-  // Topmost shape whose area contains the crosshair (screen centre), if any.
-  function rectAtCrosshair() {
-    var wp = s2w(W / 2, H / 2 - 20);
-    return topShape(wp.x, wp.y);
-  }
   // Add a new rectangle at the crosshair. The Add button (openRenameBox=true)
   // jumps straight into the rename dialog; the double-tap gesture passes false
   // so the shape is added silently and left selected.
@@ -3035,32 +3024,6 @@
     selId = r.id;
     updateToolbar();
     if (openRenameBox) openRename(r.id);
-  }
-  // Delete the rectangle currently under the crosshair (undoable). sx/sy is the
-  // press point so a drag started over a shape is switched back to a pan.
-  function deleteAtCrosshair(sx, sy) {
-    var r = rectAtCrosshair();
-    if (!r) { hintFlash('No rectangle at the crosshair'); return; }
-    var idx = rects.indexOf(r);
-    if (idx < 0) return;
-    pushHistory(capture());
-    rects.splice(idx, 1);
-    if (selId === r.id) { selId = null; selVtx = -1; }
-    if (selIds.indexOf(r.id) >= 0) {
-      var si = selIds.indexOf(r.id);
-      selIds.splice(si, 1);
-      if (selId === null && selIds.length > 0) selId = selIds[0];
-    }
-    // The delete is its own history entry; drop any in-flight gesture so the
-    // final pointerup does not push a second one.
-    pendingState = null;
-    if (mode === 'move' || mode === 'resize' || mode === 'rotate') {
-      mode = 'pan';
-      drag = null;
-      startPan(sx, sy);
-    }
-    updateToolbar();
-    hintFlash('Rectangle deleted');
   }
   // Quick tap (no movement, <500ms, not in a mode): select the topmost shape.
   // Two taps on the same shape within 350ms / 40px = rename it.
