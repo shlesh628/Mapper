@@ -967,7 +967,17 @@
     if (undoStack.length > MAX_HISTORY) undoStack.shift();
     redoStack.length = 0;
     updateToolbar();
-    persistDocument();
+    // Defer the autosave to the end of this task: the codebase rule is to call
+    // pushHistory() BEFORE mutating, so a synchronous save here would persist
+    // the pre-change state and drop the very edit being recorded. Firing on a
+    // fresh timer captures the already-mutated live document instead.
+    schedulePersist();
+  }
+  var persistT = null;
+  function schedulePersist() {
+    if (!appReady) return;
+    clearTimeout(persistT);
+    persistT = setTimeout(persistDocument, 0);
   }
   function beginGesture() { pendingState = capture(); }
   function commitGesture() {
@@ -977,6 +987,10 @@
     pendingState = null;
   }
   function restoreState(s) {
+    // Undo/redo must NOT move the camera: keep the live view untouched while
+    // the document is replaced. The restored floors carry their saved
+    // per-floor views, which only apply again on a later floor switch.
+    var cam = { x: view.x, y: view.y, scale: view.scale, rot: view.rot };
     floors = s.floors.map(function (f) {
       return {
         name: f.name,
@@ -992,7 +1006,7 @@
     });
     activeIndex = Math.min(s.activeIndex, floors.length - 1);
     syncActiveFloor();
-    restoreFloorView(activeIndex);
+    view.x = cam.x; view.y = cam.y; view.scale = cam.scale; view.rot = cam.rot;
     renderFloorTabs();
     updateToolbar();
   }
@@ -1219,8 +1233,11 @@
   var DOC_KEY = 'mapperDoc';
   var appReady = false;
   // Same shape as the export file (version 2): reuse for both export and save.
-  function serializeState() {
-    return {
+  // When withHistory is true the undo/redo stacks ride along (persistence only;
+  // export omits them). Rect ids and per-floor nextId are kept so a restored
+  // history still references the right shapes.
+  function serializeState(withHistory) {
+    var data = {
       version: 2,
       view: { x: view.x, y: view.y, scale: view.scale, rot: view.rot },
       activeFloor: activeIndex,
@@ -1228,11 +1245,12 @@
       floors: floors.map(function (f) {
         return {
           name: f.name,
+          nextId: f.nextId,
           view: f.view || null,
           marker: f.marker ? { x: f.marker.x, y: f.marker.y } : null,
           rects: f.rects.map(function (r) {
             return {
-              name: r.name, cx: r.cx, cy: r.cy,
+              id: r.id, name: r.name, cx: r.cx, cy: r.cy,
               w: r.w, h: r.h, rot: r.rot,
               color: r.color, alpha: r.alpha, notes: r.notes || '',
               pts: r.pts ? r.pts.map(function (p) { return { x: p.x, y: p.y }; }) : null
@@ -1241,13 +1259,25 @@
         };
       })
     };
+    if (withHistory) {
+      data.undo = undoStack;
+      data.redo = redoStack;
+    }
+    return data;
   }
   function persistDocument() {
     if (!appReady) return;
     try {
       saveFloorView();
-      localStorage.setItem(DOC_KEY, JSON.stringify(serializeState()));
-    } catch (err) {}
+      localStorage.setItem(DOC_KEY, JSON.stringify(serializeState(true)));
+    } catch (err) {
+      // Storage quota: retry WITHOUT undo/redo history so the map itself (and
+      // the per-floor cameras) still always survive.
+      try {
+        saveFloorView();
+        localStorage.setItem(DOC_KEY, JSON.stringify(serializeState(false)));
+      } catch (err2) {}
+    }
   }
   window.addEventListener('pagehide', persistDocument);
   window.addEventListener('beforeunload', persistDocument);
@@ -3162,7 +3192,7 @@
     updateToolbar();
   });
   exportBtn.addEventListener('click', function () {
-    var data = serializeState();
+    var data = serializeState(false);
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -3198,10 +3228,12 @@
     };
     reader.readAsText(file);
   }
-  // Sanitize one imported rect into the live shape format (id assigned later).
+  // Sanitize one imported rect into the live shape format. A saved doc carries
+  // real ids (kept so restored undo/redo history still matches); a fresh import
+  // has none and gets assigned by floorsFromData.
   function sanitizeRect(r) {
     return {
-      id: 0,
+      id: (typeof r.id === 'number' && r.id > 0) ? r.id : 0,
       name: String(r.name == null ? '' : r.name),
       notes: String(r.notes == null ? '' : r.notes),
       cx: Number(r.cx) || 0,
@@ -3216,8 +3248,9 @@
         : null
     };
   }
-  // Build fresh floor objects from a v1 (flat rects) or v2 (floors[]) payload
-  // and assign new ids so the document's id sequence stays consistent.
+  // Build fresh floor objects from a v1 (flat rects) or v2 (floors[]) payload.
+  // Ids already present (from an autosaved doc) are kept and nextId advanced
+  // past the largest; otherwise new sequential ids are assigned.
   function floorsFromData(data) {
     var imported;
     if (Array.isArray(data.floors)) {
@@ -3229,7 +3262,7 @@
           marker: (f.marker && typeof f.marker.x === 'number' && typeof f.marker.y === 'number')
             ? { x: f.marker.x, y: f.marker.y } : null,
           rects: (Array.isArray(f.rects) ? f.rects : []).map(sanitizeRect),
-          nextId: 1
+          nextId: (typeof f.nextId === 'number' && f.nextId > 0) ? f.nextId : 1
         };
       });
     } else {
@@ -3243,9 +3276,30 @@
     }
     if (imported.length === 0) imported = [{ name: 'Ground', rects: [], marker: null, nextId: 1 }];
     imported.forEach(function (f) {
-      f.rects.forEach(function (r) { r.id = f.nextId++; });
+      f.rects.forEach(function (r) {
+        if (!(typeof r.id === 'number' && r.id > 0)) r.id = f.nextId++;
+      });
+      var maxId = 0;
+      for (var k = 0; k < f.rects.length; k++) {
+        if (f.rects[k].id > maxId) maxId = f.rects[k].id;
+      }
+      if (f.nextId <= maxId) f.nextId = maxId + 1;
     });
     return imported;
+  }
+  // Validate persisted undo/redo snapshots back into shape. Each snapshot is
+  // re-sanitized through floorsFromData (preserving ids), so a corrupted entry
+  // can't crash a later undo; invalid entries are dropped.
+  function sanitizeHistory(arr) {
+    if (!Array.isArray(arr)) return [];
+    var out = [];
+    for (var i = 0; i < arr.length && i < MAX_HISTORY; i++) {
+      var s = arr[i];
+      if (s && typeof s.activeIndex === 'number' && Array.isArray(s.floors) && s.floors.length > 0) {
+        out.push({ activeIndex: Math.max(0, s.activeIndex), floors: floorsFromData(s) });
+      }
+    }
+    return out;
   }
   // Replace the live document with imported/restored data: floors, active
   // floor, and the top-level camera snapshot. Used by both Import and startup.
@@ -3409,15 +3463,17 @@
   // ===== Init =====
   document.getElementById('crosshairBtn').classList.add('mode-on');
   viewBtnZoom.classList.add('mode-on');
-  // Restore the previous session (rooms, floors, camera, view mode) from
-  // localStorage before the first paint. applyDocumentData does the heavy
-  // lifting; the empty-document state is discarded.
+  // Restore the previous session (rooms, floors, camera, view mode, and the
+  // undo/redo stacks) from localStorage before the first paint. applyDocumentData
+  // does the heavy lifting; the empty-document state is discarded.
   try {
     var savedDoc = localStorage.getItem('mapperDoc');
     if (savedDoc) {
       var restored = JSON.parse(savedDoc);
       if (restored && Array.isArray(restored.floors)) {
         applyDocumentData(restored);
+        undoStack = sanitizeHistory(restored.undo);
+        redoStack = sanitizeHistory(restored.redo);
         if (restored.viewMode) setViewMode(true);
       }
     }
