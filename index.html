@@ -412,7 +412,7 @@
 <div id="confirmOverlay">
   <div class="card">
     <h3 id="confirmTitle"></h3>
-    <p class="card-note">This deletes the floor and all of its shapes.</p>
+    <p class="card-note" id="confirmNote">This deletes the floor and all of its shapes.</p>
     <div class="row">
       <button class="btn" id="confirmCancel" type="button">Cancel</button>
       <button class="btn danger" id="confirmOk" type="button">Delete</button>
@@ -422,7 +422,7 @@
 <div id="infoOverlay">
   <div class="card">
     <h3>Via Zen Mapper</h3>
-    <p class="card-note">Version: 0.5.2 alpha</p>
+    <p class="card-note">Version: 0.5.3 alpha</p>
     <p class="card-note">Status: feature complete</p>
     <p class="card-note">Platform: Mobile only (iOS untested)</p>
     <p class="card-note">Creator: Shlesh using Opencode</p>
@@ -616,6 +616,7 @@
   var notesSave = document.getElementById('notesSave');
   var notesCancel = document.getElementById('notesCancel');
   var confirmTitle = document.getElementById('confirmTitle');
+  var confirmNote = document.getElementById('confirmNote');
   var confirmOk = document.getElementById('confirmOk');
   var confirmCancel = document.getElementById('confirmCancel');
   var fileInput = document.getElementById('fileInput');
@@ -832,7 +833,35 @@
     if (metaTheme) metaTheme.setAttribute('content', dark ? '#0f1015' : '#eef1f6');
     try { localStorage.setItem('mapperTheme', dark ? 'dark' : 'light'); } catch (err) {}
   }
+  // Long-press (500ms) on the theme toggle asks to wipe everything and start a
+  // fresh map; a quick tap keeps its normal light/dark switch. The suppress
+  // flag swallows the click that follows a completed long-press.
+  var themeLPTimer = null;
+  var themeSuppressClick = false;
+  themeBtn.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    clearTimeout(themeLPTimer);
+    themeSuppressClick = false;
+    themeLPTimer = setTimeout(function () {
+      themeLPTimer = null;
+      themeSuppressClick = true;
+      askClearMap();
+    }, 500);
+  });
+  themeBtn.addEventListener('pointerup', function () {
+    clearTimeout(themeLPTimer);
+    themeLPTimer = null;
+  });
+  themeBtn.addEventListener('pointercancel', function () {
+    clearTimeout(themeLPTimer);
+    themeLPTimer = null;
+  });
+  themeBtn.addEventListener('pointerleave', function () {
+    clearTimeout(themeLPTimer);
+    themeLPTimer = null;
+  });
   themeBtn.addEventListener('click', function () {
+    if (themeSuppressClick) { themeSuppressClick = false; return; }
     setTheme(!document.body.classList.contains('dark'));
   });
   (function initTheme() {
@@ -938,6 +967,7 @@
     if (undoStack.length > MAX_HISTORY) undoStack.shift();
     redoStack.length = 0;
     updateToolbar();
+    persistDocument();
   }
   function beginGesture() { pendingState = capture(); }
   function commitGesture() {
@@ -970,11 +1000,13 @@
     if (!undoStack.length) return;
     redoStack.push(capture());
     restoreState(undoStack.pop());
+    persistDocument();
   }
   function redo() {
     if (!redoStack.length) return;
     undoStack.push(capture());
     restoreState(redoStack.pop());
+    persistDocument();
   }
 
   function hexToRgba(hex, a) {
@@ -1143,6 +1175,7 @@
     restoreFloorView(i);
     renderFloorTabs();
     updateToolbar();
+    persistDocument();
   }
   // Arrow glyphs for the floor-change indicator: upload when moving to a
   // higher floor, download when moving to a lower one.
@@ -1177,6 +1210,48 @@
       view.rot = fv.rot || 0;
     }
   }
+
+  // ===== Autosave / persistence =====
+  // The whole document (floors, shapes, active floor, camera, view mode) is
+  // written to localStorage on every edit and on page close, so a reload
+  // brings the map back. `appReady` guards the very first moments of startup
+  // so the freshly-restored doc is never overwritten by an early persist.
+  var DOC_KEY = 'mapperDoc';
+  var appReady = false;
+  // Same shape as the export file (version 2): reuse for both export and save.
+  function serializeState() {
+    return {
+      version: 2,
+      view: { x: view.x, y: view.y, scale: view.scale, rot: view.rot },
+      activeFloor: activeIndex,
+      viewMode: viewMode,
+      floors: floors.map(function (f) {
+        return {
+          name: f.name,
+          view: f.view || null,
+          marker: f.marker ? { x: f.marker.x, y: f.marker.y } : null,
+          rects: f.rects.map(function (r) {
+            return {
+              name: r.name, cx: r.cx, cy: r.cy,
+              w: r.w, h: r.h, rot: r.rot,
+              color: r.color, alpha: r.alpha, notes: r.notes || '',
+              pts: r.pts ? r.pts.map(function (p) { return { x: p.x, y: p.y }; }) : null
+            };
+          })
+        };
+      })
+    };
+  }
+  function persistDocument() {
+    if (!appReady) return;
+    try {
+      saveFloorView();
+      localStorage.setItem(DOC_KEY, JSON.stringify(serializeState()));
+    } catch (err) {}
+  }
+  window.addEventListener('pagehide', persistDocument);
+  window.addEventListener('beforeunload', persistDocument);
+
   function addFloor() {
     var n = floors.length + 1;
     var name = 'Floor ' + n;
@@ -1231,6 +1306,20 @@
     if (floors.length <= 1 || i < 0 || i >= floors.length) return;
     confirmPending = i;
     confirmTitle.textContent = 'Delete floor "' + floors[i].name + '"?';
+    confirmNote.textContent = 'This deletes the floor and all of its shapes.';
+    confirmOk.textContent = 'Delete';
+    confirmOverlay.classList.add('show');
+  }
+  // Confirm dialog for long-pressing the theme toggle: wipes the whole map.
+  // confirmPending === -2 is the sentinel for this "clear everything" action.
+  function askClearMap() {
+    var hasData = floors.length > 1;
+    for (var i = 0; i < floors.length && !hasData; i++) hasData = floors[i].rects.length > 0;
+    if (!hasData) { hintFlash('Map is already empty'); return; }
+    confirmPending = -2;
+    confirmTitle.textContent = 'Start a fresh map?';
+    confirmNote.textContent = 'This deletes every floor, all shapes, and the undo/redo history. This cannot be undone.';
+    confirmOk.textContent = 'Clear map';
     confirmOverlay.classList.add('show');
   }
   function closeConfirm() {
@@ -1238,10 +1327,40 @@
     confirmPending = -1;
   }
   confirmOk.addEventListener('click', function () {
-    var i = confirmPending;
+    var p = confirmPending;
     closeConfirm();
-    if (i >= 0 && i < floors.length) deleteFloor(i);
+    if (p === -2) { resetDocument(); return; }
+    if (p >= 0 && p < floors.length) deleteFloor(p);
   });
+  // Wipe the document back to the default empty single-floor state, including
+  // all undo/redo history, then autosave the cleared state.
+  function resetDocument() {
+    undoStack.length = 0;
+    redoStack.length = 0;
+    pendingState = null;
+    cancelViewAnim();
+    marquee = null;
+    mode = null;
+    drag = null;
+    pinch = null;
+    floors = [{ name: 'Ground', rects: [], marker: null, nextId: 1 }];
+    activeIndex = 0;
+    syncActiveFloor();
+    view.x = -150; view.y = -110; view.scale = 1; view.rot = 0;
+    markerMode = false; markerBtn.classList.remove('mode-on');
+    editMode = false; editBtn.classList.remove('mode-on'); selVtx = -1;
+    selectMode = false; selectBtn.classList.remove('mode-on');
+    searchMode = false; searchMatches.length = 0;
+    closeRename();
+    closeNotes();
+    closeWheel();
+    setViewMode(false);
+    renderFloorTabs();
+    updateToolbar();
+    updateHintText();
+    persistDocument();
+    hintFlash('Started a fresh map');
+  }
   confirmCancel.addEventListener('click', closeConfirm);
   confirmOverlay.addEventListener('pointerdown', function (e) {
     if (e.target === confirmOverlay) closeConfirm();
@@ -3022,6 +3141,7 @@
     }
     updateHintText();
     updateToolbar();
+    persistDocument();
   }
   viewBtn.addEventListener('click', function () {
     setViewMode(!viewMode);
@@ -3042,26 +3162,7 @@
     updateToolbar();
   });
   exportBtn.addEventListener('click', function () {
-    var data = {
-      version: 2,
-      view: { x: view.x, y: view.y, scale: view.scale, rot: view.rot },
-      activeFloor: activeIndex,
-      floors: floors.map(function (f) {
-        return {
-          name: f.name,
-          view: f.view || null,
-          marker: f.marker ? { x: f.marker.x, y: f.marker.y } : null,
-          rects: f.rects.map(function (r) {
-            return {
-              name: r.name, cx: r.cx, cy: r.cy,
-              w: r.w, h: r.h, rot: r.rot,
-              color: r.color, alpha: r.alpha, notes: r.notes || '',
-              pts: r.pts ? r.pts.map(function (p) { return { x: p.x, y: p.y }; }) : null
-            };
-          })
-        };
-      })
-    };
+    var data = serializeState();
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -3086,72 +3187,82 @@
         if (!data || !(Array.isArray(data.floors) || Array.isArray(data.rects))) {
           throw new Error('not a valid mapper file');
         }
-        var sanitize = function (r) {
-          return {
-            id: 0,
-            name: String(r.name == null ? '' : r.name),
-            notes: String(r.notes == null ? '' : r.notes),
-            cx: Number(r.cx) || 0,
-            cy: Number(r.cy) || 0,
-            w: Math.max(MIN_W, Number(r.w) || MIN_W),
-            h: Math.max(MIN_H, Number(r.h) || MIN_H),
-            rot: Number(r.rot) || 0,
-            color: /^#[0-9a-fA-F]{3,8}$/.test(r.color || '') ? r.color : DEFAULT_FILL,
-            alpha: typeof r.alpha === 'number' ? Math.max(0, Math.min(1, r.alpha)) : DEFAULT_ALPHA,
-            pts: (Array.isArray(r.pts) && r.pts.length >= 3)
-              ? r.pts.map(function (p) { return { x: Number(p.x) || 0, y: Number(p.y) || 0 }; })
-              : null
-          };
-        };
-        var imported;
-        if (Array.isArray(data.floors)) {
-          imported = data.floors.map(function (f) {
-            return {
-              name: String(f.name == null ? 'Floor' : f.name),
-              view: (f.view && typeof f.view.x === 'number' && typeof f.view.y === 'number' && typeof f.view.scale === 'number')
-                ? { x: f.view.x, y: f.view.y, scale: Math.max(0.05, Math.min(10, f.view.scale)), rot: Number(f.view.rot) || 0 } : null,
-              marker: (f.marker && typeof f.marker.x === 'number' && typeof f.marker.y === 'number')
-                ? { x: f.marker.x, y: f.marker.y } : null,
-              rects: (Array.isArray(f.rects) ? f.rects : []).map(sanitize),
-              nextId: 1
-            };
-          });
-        } else {
-          imported = [{
-            name: 'Ground',
-            marker: (data.marker && typeof data.marker.x === 'number' && typeof data.marker.y === 'number')
-              ? { x: data.marker.x, y: data.marker.y } : null,
-            rects: data.rects.map(sanitize),
-            nextId: 1
-          }];
-        }
-        if (imported.length === 0) {
-          imported = [{ name: 'Ground', rects: [], marker: null, nextId: 1 }];
-        }
-        imported.forEach(function (f) {
-          f.rects.forEach(function (r) { r.id = f.nextId++; });
-        });
         pushHistory(capture());
-        floors = imported;
-        activeIndex = (typeof data.activeFloor === 'number' && data.activeFloor >= 0 && data.activeFloor < floors.length)
-          ? data.activeFloor : 0;
-        if (data.view && typeof data.view.x === 'number' && typeof data.view.scale === 'number') {
-          view.x = data.view.x;
-          view.y = data.view.y;
-          view.scale = Math.max(0.05, Math.min(10, data.view.scale));
-          view.rot = Number(data.view.rot) || 0;
-        }
-        syncActiveFloor();
-        restoreFloorView(activeIndex);
-        renderFloorTabs();
-        updateToolbar();
+        applyDocumentData(data);
         setViewMode(true);
+        persistDocument();
         hintFlash('Imported ' + floors.length + ' floor(s)');
       } catch (err) {
         hintFlash('Import failed');
       }
     };
     reader.readAsText(file);
+  }
+  // Sanitize one imported rect into the live shape format (id assigned later).
+  function sanitizeRect(r) {
+    return {
+      id: 0,
+      name: String(r.name == null ? '' : r.name),
+      notes: String(r.notes == null ? '' : r.notes),
+      cx: Number(r.cx) || 0,
+      cy: Number(r.cy) || 0,
+      w: Math.max(MIN_W, Number(r.w) || MIN_W),
+      h: Math.max(MIN_H, Number(r.h) || MIN_H),
+      rot: Number(r.rot) || 0,
+      color: /^#[0-9a-fA-F]{3,8}$/.test(r.color || '') ? r.color : DEFAULT_FILL,
+      alpha: typeof r.alpha === 'number' ? Math.max(0, Math.min(1, r.alpha)) : DEFAULT_ALPHA,
+      pts: (Array.isArray(r.pts) && r.pts.length >= 3)
+        ? r.pts.map(function (p) { return { x: Number(p.x) || 0, y: Number(p.y) || 0 }; })
+        : null
+    };
+  }
+  // Build fresh floor objects from a v1 (flat rects) or v2 (floors[]) payload
+  // and assign new ids so the document's id sequence stays consistent.
+  function floorsFromData(data) {
+    var imported;
+    if (Array.isArray(data.floors)) {
+      imported = data.floors.map(function (f) {
+        return {
+          name: String(f.name == null ? 'Floor' : f.name),
+          view: (f.view && typeof f.view.x === 'number' && typeof f.view.y === 'number' && typeof f.view.scale === 'number')
+            ? { x: f.view.x, y: f.view.y, scale: Math.max(0.05, Math.min(10, f.view.scale)), rot: Number(f.view.rot) || 0 } : null,
+          marker: (f.marker && typeof f.marker.x === 'number' && typeof f.marker.y === 'number')
+            ? { x: f.marker.x, y: f.marker.y } : null,
+          rects: (Array.isArray(f.rects) ? f.rects : []).map(sanitizeRect),
+          nextId: 1
+        };
+      });
+    } else {
+      imported = [{
+        name: 'Ground',
+        marker: (data.marker && typeof data.marker.x === 'number' && typeof data.marker.y === 'number')
+          ? { x: data.marker.x, y: data.marker.y } : null,
+        rects: (Array.isArray(data.rects) ? data.rects : []).map(sanitizeRect),
+        nextId: 1
+      }];
+    }
+    if (imported.length === 0) imported = [{ name: 'Ground', rects: [], marker: null, nextId: 1 }];
+    imported.forEach(function (f) {
+      f.rects.forEach(function (r) { r.id = f.nextId++; });
+    });
+    return imported;
+  }
+  // Replace the live document with imported/restored data: floors, active
+  // floor, and the top-level camera snapshot. Used by both Import and startup.
+  function applyDocumentData(data) {
+    floors = floorsFromData(data);
+    activeIndex = (typeof data.activeFloor === 'number' && data.activeFloor >= 0 && data.activeFloor < floors.length)
+      ? data.activeFloor : 0;
+    if (data.view && typeof data.view.x === 'number' && typeof data.view.scale === 'number') {
+      view.x = data.view.x;
+      view.y = data.view.y;
+      view.scale = Math.max(0.05, Math.min(10, data.view.scale));
+      view.rot = Number(data.view.rot) || 0;
+    }
+    syncActiveFloor();
+    restoreFloorView(activeIndex);
+    renderFloorTabs();
+    updateToolbar();
   }
   okBtn.addEventListener('click', function () {
     var v = nameInput.value.trim();
@@ -3298,9 +3409,23 @@
   // ===== Init =====
   document.getElementById('crosshairBtn').classList.add('mode-on');
   viewBtnZoom.classList.add('mode-on');
+  // Restore the previous session (rooms, floors, camera, view mode) from
+  // localStorage before the first paint. applyDocumentData does the heavy
+  // lifting; the empty-document state is discarded.
+  try {
+    var savedDoc = localStorage.getItem('mapperDoc');
+    if (savedDoc) {
+      var restored = JSON.parse(savedDoc);
+      if (restored && Array.isArray(restored.floors)) {
+        applyDocumentData(restored);
+        if (restored.viewMode) setViewMode(true);
+      }
+    }
+  } catch (err) {}
   renderFloorTabs();
   updateToolbar();
   updateHintText();
+  appReady = true;
 })();
 </script>
 </body>
