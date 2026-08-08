@@ -552,7 +552,7 @@
    *  - Marker  : tap/drag places or moves the floor marker.
    *  - Edit    : selected shape shows its real vertices + edge midpoints.
    *              Drag a vertex to move it, tap an edge midpoint to insert a
-   *              vertex, long-press a vertex to remove it (min 3). Dragging
+   *              vertex, double-tap a vertex to remove it (min 3). Dragging
    *              inside the shape still moves the whole shape.
    *              See editHitTest / doVtx / addVtx / removeVtx / removeVtxNow.
    *
@@ -730,7 +730,7 @@
   function hintText() {
     if (viewMode) return markerMode ? 'View mode: pan/zoom, tap to place or drag to move the marker' : 'View mode: pan and zoom only';
     if (markerMode) return 'Marker mode: tap to place, drag to move';
-    if (editMode) return 'Edit mode: drag vertices, tap edge to add, hold to remove';
+    if (editMode) return 'Edit mode: drag vertices, tap edge to add, double-tap a vertex to remove';
     if (selectMode) return 'Move mode: tap to pick/drop, hold then drag to move, hold empty space to box-select, drag to pan';
     return crosshairEnabled ? DEFAULT_HINT : 'Drag to pan - tap a shape - pinch to zoom';
   }
@@ -2793,7 +2793,6 @@
         selVtx = eh.i;
         mode = 'vtx';
         drag = { rect: eh.rect, i: eh.i };
-        lpTimer = setTimeout(function () { removeVtxNow(eh.rect, eh.i); }, 500);
       } else if (eh.type === 'edge') {
         beginGesture();
         ensurePts(eh.rect);
@@ -2875,6 +2874,7 @@
     if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) {
       p.moved = true;
       if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+      vtxTap = null;
     }
     p.x = e.clientX; p.y = e.clientY;
     if (pointers.size >= 2) {
@@ -2912,8 +2912,8 @@
     // A tap is a release with no movement, <500ms duration. In Move mode the
     // long-press didn't fire and no pan started (movePending still alive), so
     // the press resolves as a selection toggle: tap a shape to pick/drop it,
-    // tap empty space to clear. Other modes handle taps on pointerdown, so
-    // handleTap only runs in the default mode.
+    // tap empty space to clear. In Edit mode taps route to handleEditTap
+    // (double-tap a vertex to delete it); handleTap only runs in default mode.
     if (p && !p.moved && (performance.now() - p.t) < 500) {
       if (selectMode) {
         if (movePending && movePending.id === e.pointerId) {
@@ -2922,7 +2922,9 @@
           movePending = null;
           updateToolbar();
         }
-      } else if (!markerMode && !viewMode && !editMode) {
+      } else if (editMode) {
+        handleEditTap(p);
+      } else if (!markerMode && !viewMode) {
         handleTap(p);
       }
     }
@@ -2997,6 +2999,26 @@
     mode = null;
     drag = null;
     pendingState = null;
+  }
+  // Edit-mode tap handling: a double-tap on the same vertex (within 350ms and
+  // without the vertex having moved in between) removes it. Any other tap just
+  // records the last vertex tapped so the next tap on it completes the pair.
+  var vtxTap = null;
+  var VERTEX_DOUBLE_TAP_MS = 350;
+  function handleEditTap(p) {
+    if (selId === null) return;
+    var r = findRect(selId);
+    if (!r) return;
+    var hit = editHitTest(p.x, p.y);
+    var now = performance.now();
+    if (hit.type === 'vtx' && hit.rect.id === r.id &&
+        vtxTap && vtxTap.id === r.id && vtxTap.i === hit.i &&
+        (now - vtxTap.t) < VERTEX_DOUBLE_TAP_MS) {
+      vtxTap = null;
+      removeVtxNow(hit.rect, hit.i);
+      return;
+    }
+    vtxTap = (hit.type === 'vtx' && hit.rect.id === r.id) ? { id: r.id, i: hit.i, t: now } : null;
   }
   // Topmost shape whose area contains the crosshair (screen centre), if any.
   function rectAtCrosshair() {
