@@ -42,6 +42,23 @@
     --sw-border: rgba(255,255,255,.22);
     --shadow: rgba(0,0,0,.3);
   }
+  body.dark button:not(.toolbar button) {
+    box-shadow: 0 0 0 1px rgba(77,216,255,.75), 0 0 5px rgba(77,216,255,.45), 0 0 12px rgba(77,216,255,.28);
+  }
+  body.dark .rot-slider {
+    box-shadow: 0 0 0 1px rgba(77,216,255,.75), 0 0 5px rgba(77,216,255,.45), 0 0 12px rgba(77,216,255,.28);
+  }
+  body.dark .searchbar,
+  body.dark .card,
+  body.dark #floorIndicator,
+  body.dark .hint {
+    box-shadow: 0 0 0 1px rgba(77,216,255,.75), 0 0 5px rgba(77,216,255,.45), 0 0 12px rgba(77,216,255,.28);
+  }
+  body.dark .ftab-wrap .ftab-del { box-shadow: none; }
+  body.dark .toolbar {
+    border-top-color: rgba(77,216,255,.55);
+    box-shadow: 0 -1px 0 rgba(77,216,255,.8), 0 -8px 20px rgba(77,216,255,.25);
+  }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   /* iOS: no double-tap zoom / 300ms delay on any button. */
   button { touch-action: manipulation; }
@@ -94,10 +111,11 @@
   .searchbar button:active { background: var(--btn-active); }
   .floors {
     position: fixed; z-index: 10;
-    left: calc(68px + env(safe-area-inset-left)); right: 12px;
-    top: calc(8px + env(safe-area-inset-top));
+    left: calc(58px + env(safe-area-inset-left)); right: 12px;
+    top: calc(-6px + env(safe-area-inset-top));
     display: flex; align-items: center; gap: 6px;
     overflow-x: auto; scrollbar-width: none;
+    padding: 14px 10px 20px;
   }
   .floors::-webkit-scrollbar { display: none; }
   .ftab-wrap { flex: 0 0 auto; position: relative; }
